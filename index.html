@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#17231d" />
+  <title>磨坊棋 · Nine Men's Morris</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="game-shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">NINE MEN'S MORRIS</p>
+        <h1>磨坊棋</h1>
+        <p class="subtitle">落子成线，围猎对手。每一步，都在布一张更大的网。</p>
+      </div>
+      <button class="icon-button" id="rulesButton" aria-label="查看规则">规则 <span>?</span></button>
+    </section>
+
+    <section class="game-layout">
+      <aside class="player-card player-one active" id="playerCard0">
+        <div class="player-heading">
+          <span class="turn-dot"></span>
+          <div><small>玩家一</small><strong>象牙白</strong></div>
+        </div>
+        <div class="stats">
+          <span><b id="whiteBoard">0</b> 棋盘</span>
+          <span><b id="whiteHand">9</b> 待下</span>
+        </div>
+        <div class="captured" id="whiteCaptured" aria-label="白方吃掉的棋子"></div>
+      </aside>
+
+      <section class="board-panel">
+        <div class="status-wrap" aria-live="polite">
+          <span class="phase" id="phaseLabel">布子阶段</span>
+          <p id="statusText">象牙白先手，请选择一个交点落子</p>
+        </div>
+        <div class="board-frame">
+          <div class="board" id="board" role="grid" aria-label="磨坊棋棋盘">
+            <svg class="board-lines" viewBox="0 0 600 600" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M55 55H545V545H55Z"/><path d="M140 140H460V460H140Z"/><path d="M225 225H375V375H225Z"/>
+                <path d="M300 55V225M545 300H375M300 545V375M55 300H225"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="modeButton"><span>♟</span> <b id="modeName">本地双人</b></button>
+          <button id="undoButton" disabled><span>↶</span> 撤销一步</button>
+          <button id="restartButton" class="primary"><span>↻</span> 重新开始</button>
+        </div>
+      </section>
+
+      <aside class="player-card player-two" id="playerCard1">
+        <div class="player-heading">
+          <span class="turn-dot"></span>
+          <div><small>玩家二</small><strong>曜石黑</strong></div>
+        </div>
+        <div class="stats">
+          <span><b id="blackBoard">0</b> 棋盘</span>
+          <span><b id="blackHand">9</b> 待下</span>
+        </div>
+        <div class="captured" id="blackCaptured" aria-label="黑方吃掉的棋子"></div>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="modeDialog" class="mode-dialog">
+    <button class="dialog-close" data-close="modeDialog" aria-label="关闭">×</button>
+    <p class="eyebrow">GAME MODE</p><h2>选择对战方式</h2>
+    <div class="mode-grid">
+      <button class="mode-option" data-mode="local"><span>◐</span><b>本地双人</b><small>两位玩家共用此设备</small></button>
+      <button class="mode-option" data-mode="ai"><span>✦</span><b>人机对战</b><small>挑战策略型电脑对手</small></button>
+      <button class="mode-option" data-mode="online"><span>⌁</span><b>远程在线</b><small>点对点连接远方好友</small></button>
+    </div>
+    <div class="ai-settings" id="aiSettings" hidden>
+      <label>电脑难度<select id="aiLevel"><option value="easy">轻松</option><option value="medium" selected>进阶</option><option value="hard">高手</option></select></label>
+      <label>你的棋色<select id="humanColor"><option value="0">象牙白（先手）</option><option value="1">曜石黑（后手）</option></select></label>
+      <button class="primary wide" id="startAI">开始挑战</button>
+    </div>
+  </dialog>
+
+  <dialog id="onlineDialog" class="online-dialog">
+    <button class="dialog-close" id="closeOnline" aria-label="关闭">×</button>
+    <p class="eyebrow">P2P ONLINE</p><h2>远程在线对战</h2>
+    <div id="onlineStart"><p class="dialog-note">通过邀请文本建立浏览器间的加密连接。无需账号，双方不必在同一网络。</p><div class="online-actions"><button id="createRoom" class="primary">创建对局</button><button id="joinRoom">加入对局</button></div></div>
+    <div id="onlineFlow" hidden>
+      <p class="connection-status" id="connectionStatus">正在准备连接…</p>
+      <label id="signalInputWrap" hidden><span id="signalInputLabel">粘贴好友发来的文本</span><textarea id="signalInput" rows="4" placeholder="粘贴完整邀请文本"></textarea></label>
+      <label id="signalOutputWrap" hidden><span>复制下面的文本发给好友</span><textarea id="signalOutput" rows="4" readonly></textarea></label>
+      <div class="online-actions"><button id="applySignal" class="primary" hidden>确认</button><button id="copySignal" hidden>复制文本</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="rulesDialog">
+    <button class="dialog-close" id="closeRules" aria-label="关闭">×</button>
+    <p class="eyebrow">HOW TO PLAY</p><h2>游戏规则</h2>
+    <ol>
+      <li><b>布子</b>：双方轮流把 9 枚棋子放到棋盘交点。</li>
+      <li><b>走子</b>：布子结束后，每回合沿棋盘连线移动一格。</li>
+      <li><b>成磨</b>：三枚己方棋子连成一线，可移除对方一枚棋子。若对方仍有不在“磨”中的棋子，不能移除磨内棋子。</li>
+      <li><b>飞行</b>：只剩 3 枚棋子时，可移动到任意空交点。</li>
+      <li><b>获胜</b>：令对方少于 3 枚棋子，或使其无合法走法。</li>
+    </ol>
+    <button class="primary wide" id="gotIt">明白了</button>
+  </dialog>
+
+  <dialog id="winDialog" class="win-dialog">
+    <div class="winner-piece" id="winnerPiece"></div>
+    <p class="eyebrow">GAME OVER</p><h2 id="winnerTitle">象牙白获胜</h2>
+    <p id="winnerReason"></p>
+    <button class="primary wide" id="playAgain">再来一局</button>
+  </dialog>
+  <style>
+    .mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.mode-option{min-height:128px;border:1px solid rgba(238,229,207,.14);border-radius:16px;background:rgba(255,255,255,.04);color:var(--ink);padding:15px 8px;cursor:pointer;transition:.2s}.mode-option:hover{border-color:var(--gold);transform:translateY(-2px)}.mode-option>span{display:block;color:var(--gold);font-size:1.6rem;margin-bottom:8px}.mode-option b,.mode-option small{display:block}.mode-option small{color:var(--muted);font-size:.68rem;margin-top:5px}.ai-settings{margin-top:15px;padding:15px;border-radius:15px;background:rgba(0,0,0,.15)}.ai-settings label{display:flex;align-items:center;justify-content:space-between;margin:8px 0;color:#c4c4b9;font-size:.83rem}select{color:var(--ink);background:#26382e;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px}.dialog-note{color:var(--muted);font-size:.83rem;line-height:1.55}.online-actions{display:flex;gap:10px;margin-top:15px}.online-actions button{flex:1;border:1px solid rgba(238,229,207,.2);color:var(--ink);background:rgba(255,255,255,.05);border-radius:12px;padding:11px;cursor:pointer}.connection-status{padding:10px 12px;border-left:3px solid var(--gold);background:rgba(215,168,75,.08);font-size:.82rem}.online-dialog label{display:block;margin-top:12px;color:var(--muted);font-size:.75rem}.online-dialog textarea{display:block;width:100%;resize:vertical;margin-top:6px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:#101a15;color:#d9d6cb;padding:10px;font:11px/1.35 monospace}.controls{flex-wrap:wrap}@media(max-width:520px){.mode-grid{grid-template-columns:1fr}.mode-option{min-height:70px}.mode-option>span{display:inline;margin-right:8px}}
+  </style>
+  <script src="script.js"></script>
+</body>
+</html>
