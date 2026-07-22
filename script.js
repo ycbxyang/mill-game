@@ -11,7 +11,6 @@ let state;
 const boardEl=document.querySelector('#board');
 
 function fresh(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,last:null,history:[]}}
-function clone(){return JSON.parse(JSON.stringify(state))}
 function save(){state.history.push({board:[...state.board],hand:[...state.hand],turn:state.turn,selected:state.selected,removing:state.removing,last:state.last})}
 function init(){state=fresh();render()}
 function inMill(i,p,board=state.board){return MILLS.some(m=>m.includes(i)&&m.every(x=>board[x]===p))}
@@ -54,12 +53,12 @@ init();
 
 // --- 对战模式、人机玩家与 WebRTC 在线同步 ---
 let gameMode='local',humanPlayer=0,aiLevel='medium',aiBusy=false,aiTimer=null;
-let peer=null,channel=null,onlinePlayer=null;
+let onlineSession=null,onlinePlayer=null;
 const rawClickPoint=clickPoint,rawInit=init,rawRender=render;
 
 function locked(){
   if(gameMode==='ai')return state.turn!==humanPlayer;
-  if(gameMode==='online')return onlinePlayer===null||state.turn!==onlinePlayer||!channel||!(channel.readyState==='open'||channel.open===true);
+  if(gameMode==='online')return onlinePlayer===null||state.turn!==onlinePlayer||!onlineSession;
   return false;
 }
 clickPoint=function(i){
@@ -78,31 +77,15 @@ render=function(){
 };
 init=function(){rawInit();if(gameMode==='online')sendGame();queueAI()};
 
-function scoreDestination(from,to,p){
-  const b=[...state.board];if(from!==null)b[from]=null;b[to]=p;
-  let score=Math.random()*2;
-  if(MILLS.some(m=>m.includes(to)&&m.every(x=>b[x]===p)))score+=100;
-  for(const m of MILLS.filter(m=>m.includes(to))){const own=m.filter(x=>b[x]===p).length,empty=m.filter(x=>b[x]===null).length;if(own===2&&empty===1)score+=14}
-  const opp=1-p;for(const m of MILLS.filter(m=>m.includes(to))){const ob=[...state.board];if(from!==null)ob[from]=null;if(ob[to]===null)ob[to]=opp;if(m.every(x=>ob[x]===opp))score+=aiLevel==='easy'?4:40}
-  if([4,7,10,11,12,13,16,19].includes(to))score+=3;
-  return score;
-}
-function chooseBest(items,scorer){
-  if(aiLevel==='easy')return items[Math.floor(Math.random()*items.length)];
-  const ranked=items.map(x=>[x,scorer(x)]).sort((a,b)=>b[1]-a[1]);
-  if(aiLevel==='medium'&&ranked.length>2&&Math.random()<.25)return ranked[Math.floor(Math.random()*Math.min(3,ranked.length))][0];
-  return ranked[0][0];
-}
+let aiWorker=null,aiRequest=0;
 function queueAI(){
   clearTimeout(aiTimer);if(gameMode!=='ai'||state.winner!==null||state.turn===humanPlayer)return;
-  aiTimer=setTimeout(aiMove,aiLevel==='easy'?350:650);
+  aiTimer=setTimeout(aiMove,250);
 }
 function aiMove(){
-  if(gameMode!=='ai'||state.turn===humanPlayer||state.winner!==null)return;aiBusy=true;const p=state.turn;
-  if(state.removing){const list=removable(1-p);const target=chooseBest(list,i=>{let s=inMill(i,1-p)?1:10;for(const m of MILLS.filter(m=>m.includes(i)))if(m.filter(x=>state.board[x]===1-p).length===2)s+=8;return s});rawClickPoint(target)}
-  else if(state.hand[p]>0){const empty=state.board.map((x,i)=>x===null?i:null).filter(x=>x!==null);rawClickPoint(chooseBest(empty,i=>scoreDestination(null,i,p)))}
-  else{const moves=[];pieces(p).forEach(from=>legalTargets(from,p).forEach(to=>moves.push({from,to})));if(moves.length){const m=chooseBest(moves,x=>scoreDestination(x.from,x.to,p));rawClickPoint(m.from);rawClickPoint(m.to)}}
-  aiBusy=false;render();queueAI();
+  if(gameMode!=='ai'||state.turn===humanPlayer||state.winner!==null)return;aiBusy=true;render();
+  if(!aiWorker){aiWorker=new Worker('ai-worker.js');aiWorker.onmessage=e=>{const {move}=e.data;if(!move||gameMode!=='ai'||state.turn===humanPlayer){aiBusy=false;render();return}if(move.from!==null)rawClickPoint(move.from);rawClickPoint(move.to);if(move.remove!==null&&state.removing)rawClickPoint(move.remove);aiBusy=false;render();queueAI()}}
+  aiWorker.postMessage({id:++aiRequest,state:{board:[...state.board],hand:[...state.hand],turn:state.turn},level:aiLevel});
 }
 
 const modeDialog=document.querySelector('#modeDialog'),onlineDialog=document.querySelector('#onlineDialog');
@@ -116,44 +99,26 @@ document.querySelectorAll('.mode-option').forEach(btn=>btn.onclick=()=>{
 });
 document.querySelector('#startAI').onclick=()=>{leaveOnline();gameMode='ai';humanPlayer=Number(document.querySelector('#humanColor').value);aiLevel=document.querySelector('#aiLevel').value;document.querySelector('#modeName').textContent='人机对战';modeDialog.close();init()};
 
-function resetOnlineUI(){document.querySelector('#onlineStart').hidden=false;document.querySelector('#onlineFlow').hidden=true;document.querySelector('#signalInput').value='';document.querySelector('#signalOutput').value=''}
-function leaveOnline(){if(channel)channel.close();if(peer)peer.close();channel=null;peer=null;onlinePlayer=null}
-function makePeer(){leaveOnline();peer=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]});peer.onconnectionstatechange=()=>{const s=peer.connectionState;document.querySelector('#connectionStatus').textContent=s==='connected'?'连接成功，对局开始！':s==='failed'?'连接失败，请重新创建邀请。':`连接状态：${s}`};return peer}
-function setupChannel(ch){channel=ch;channel.onopen=()=>{document.querySelector('#connectionStatus').textContent='连接成功，对局开始！';gameMode='online';document.querySelector('#modeName').textContent='远程在线';onlineDialog.close();if(onlinePlayer===0){state=fresh();render();sendGame()}else render()};channel.onmessage=e=>{const msg=JSON.parse(e.data);if(msg.type==='game'){state={...msg.state,history:[]};render();if(state.winner!==null&&!document.querySelector('#winDialog').open)win(state.winner,'在线对局已结束')}};channel.onclose=()=>{if(gameMode==='online'){document.querySelector('#statusText').textContent='对手已断开连接';render()}}}
-function sendGame(){if(channel&&channel.readyState==='open')channel.send(JSON.stringify({type:'game',state:{board:state.board,hand:state.hand,turn:state.turn,selected:state.selected,removing:state.removing,winner:state.winner,last:state.last}}))}
-function waitIce(pc){return new Promise(resolve=>{if(pc.iceGatheringState==='complete')return resolve();const done=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',done);resolve()}};pc.addEventListener('icegatheringstatechange',done);setTimeout(resolve,5000)})}
-function showFlow(status,input,output){document.querySelector('#onlineStart').hidden=true;document.querySelector('#onlineFlow').hidden=false;document.querySelector('#connectionStatus').textContent=status;document.querySelector('#signalInputWrap').hidden=!input;document.querySelector('#signalOutputWrap').hidden=!output;document.querySelector('#applySignal').hidden=!input;document.querySelector('#copySignal').hidden=!output}
-document.querySelector('#createRoom').onclick=async()=>{try{const pc=makePeer();onlinePlayer=0;setupChannel(pc.createDataChannel('morris'));showFlow('正在生成邀请文本…',false,false);await pc.setLocalDescription(await pc.createOffer());await waitIce(pc);document.querySelector('#signalOutput').value=btoa(JSON.stringify(pc.localDescription));showFlow('把邀请文本发给好友，然后粘贴好友的回复。',true,true);document.querySelector('#signalInputLabel').textContent='粘贴好友发回的回复文本';document.querySelector('#applySignal').textContent='连接对局'}catch(e){document.querySelector('#connectionStatus').textContent='创建失败：'+e.message}};
-document.querySelector('#joinRoom').onclick=()=>{onlinePlayer=1;showFlow('粘贴创建者发来的邀请文本。',true,false);document.querySelector('#signalInputLabel').textContent='粘贴好友发来的邀请文本';document.querySelector('#applySignal').textContent='生成回复'};
-document.querySelector('#applySignal').onclick=async()=>{try{const desc=JSON.parse(atob(document.querySelector('#signalInput').value.trim()));if(onlinePlayer===1){const pc=makePeer();onlinePlayer=1;pc.ondatachannel=e=>setupChannel(e.channel);await pc.setRemoteDescription(desc);await pc.setLocalDescription(await pc.createAnswer());await waitIce(pc);document.querySelector('#signalOutput').value=btoa(JSON.stringify(pc.localDescription));showFlow('把回复文本发回给创建者，等待连接。',false,true)}else{await peer.setRemoteDescription(desc);document.querySelector('#connectionStatus').textContent='正在连接好友…';document.querySelector('#signalInputWrap').hidden=true;document.querySelector('#applySignal').hidden=true}}catch(e){document.querySelector('#connectionStatus').textContent='文本无效，请确认复制完整。'}};
-document.querySelector('#copySignal').onclick=async()=>{await navigator.clipboard.writeText(document.querySelector('#signalOutput').value);document.querySelector('#copySignal').textContent='已复制 ✓'};
-document.querySelector('#closeOnline').onclick=()=>onlineDialog.close();
-
-// 简短房间码在线模式（PeerJS Cloud 负责自动信令）
-function shortOnlineReset(){
+// Firebase 房间码在线模式
+function resetOnlineUI(){
   document.querySelector('#onlineStart').hidden=false;document.querySelector('#onlineFlow').hidden=true;
   document.querySelector('#roomCodeCard').hidden=true;document.querySelector('#roomCodeInputWrap').hidden=true;document.querySelector('#connectCode').hidden=true;
-  document.querySelector('#signalInputWrap').hidden=true;document.querySelector('#signalOutputWrap').hidden=true;document.querySelector('#applySignal').hidden=true;document.querySelector('#copySignal').hidden=true;
 }
-resetOnlineUI=shortOnlineReset;
-leaveOnline=function(){try{if(channel)channel.close()}catch(e){}try{if(peer){peer.destroy?.();peer.close?.()}}catch(e){}channel=null;peer=null;onlinePlayer=null};
-sendGame=function(){if(channel&&(channel.open===true||channel.readyState==='open'))channel.send({type:'game',state:{board:state.board,hand:state.hand,turn:state.turn,selected:state.selected,removing:state.removing,winner:state.winner,last:state.last}})};
-function peerOptions(){return{debug:1,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]}}}
-function handlePeerError(err){const map={'unavailable-id':'房间码刚好被占用，请重新创建。','peer-unavailable':'找不到这个房间，请检查数字或让创建者保持页面打开。','network':'无法连接在线服务，请检查网络后重试。','server-error':'在线服务暂时不可用，请稍后重试。','browser-incompatible':'当前浏览器不支持在线连接。'};document.querySelector('#connectionStatus').textContent=map[err.type]||('连接失败：'+err.message)}
-function bindShortChannel(conn){
-  channel=conn;conn.on('open',()=>{document.querySelector('#connectionStatus').textContent='连接成功，对局开始！';gameMode='online';document.querySelector('#modeName').textContent='远程在线';setTimeout(()=>onlineDialog.close(),500);if(onlinePlayer===0){state=fresh();render();sendGame()}else render()});
-  conn.on('data',msg=>{if(typeof msg==='string')try{msg=JSON.parse(msg)}catch(e){}if(msg&&msg.type==='game'){state={...msg.state,history:[]};render();if(state.winner!==null&&!document.querySelector('#winDialog').open)win(state.winner,'在线对局已结束')}});
-  conn.on('close',()=>{if(gameMode==='online')document.querySelector('#statusText').textContent='对手已离开对局'});conn.on('error',handlePeerError);
-}
-function showShortFlow(status){document.querySelector('#onlineStart').hidden=true;document.querySelector('#onlineFlow').hidden=false;document.querySelector('#connectionStatus').textContent=status;document.querySelector('#signalInputWrap').hidden=true;document.querySelector('#signalOutputWrap').hidden=true;document.querySelector('#applySignal').hidden=true;document.querySelector('#copySignal').hidden=true}
-document.querySelector('#createRoom').onclick=()=>{
-  if(typeof Peer==='undefined'){showShortFlow('在线组件加载失败，请检查网络并刷新页面。');return}
-  leaveOnline();onlinePlayer=0;const code=String(Math.floor(100000+Math.random()*900000));showShortFlow('正在创建房间…');document.querySelector('#roomCodeCard').hidden=false;document.querySelector('#roomCodeInputWrap').hidden=true;document.querySelector('#connectCode').hidden=true;
-  peer=new Peer('morris-'+code,peerOptions());peer.on('open',()=>{document.querySelector('#roomCodeValue').textContent=code;document.querySelector('#connectionStatus').textContent='房间已创建，等待好友加入…'});peer.on('connection',conn=>{if(channel&&channel.open){conn.close();return}bindShortChannel(conn)});peer.on('error',handlePeerError);
+function leaveOnline(){if(onlineSession)onlineSession.close();onlineSession=null;onlinePlayer=null}
+function sendGame(){if(onlineSession)onlineSession.send({board:state.board,hand:state.hand,turn:state.turn,selected:state.selected,removing:state.removing,winner:state.winner,last:state.last})}
+function showShortFlow(status){document.querySelector('#onlineStart').hidden=true;document.querySelector('#onlineFlow').hidden=false;document.querySelector('#connectionStatus').textContent=status}
+function firebaseOnline(){return new Promise((resolve,reject)=>{if(window.FirebaseOnline)return resolve(window.FirebaseOnline);const timer=setTimeout(()=>reject(Object.assign(new Error('CONFIG_MISSING'),{code:'CONFIG_MISSING'})),8000);window.addEventListener('firebase-online-ready',()=>{clearTimeout(timer);resolve(window.FirebaseOnline)},{once:true})})}
+function onlineError(error){const messages={CONFIG_MISSING:'Firebase 尚未配置，请先填写 firebase-config.js。',ROOM_EXISTS:'房间码冲突，请重新创建。',ROOM_NOT_FOUND:'找不到该房间，请核对房间码。',ROOM_FULL:'房间已经有两位玩家。','auth/operation-not-allowed':'请在 Firebase 控制台启用匿名登录。','PERMISSION_DENIED':'数据库拒绝访问，请检查 Firebase 安全规则。'};document.querySelector('#connectionStatus').textContent=messages[error.code]||messages[error.message]||`连接失败：${error.message}`}
+function receiveOnline(remote){state={...remote,history:[]};render();if(state.winner!==null&&!document.querySelector('#winDialog').open)win(state.winner,'在线对局已结束')}
+document.querySelector('#createRoom').onclick=async()=>{
+  leaveOnline();onlinePlayer=0;const code=String(Math.floor(100000+Math.random()*900000));showShortFlow('正在创建云端房间…');document.querySelector('#roomCodeCard').hidden=false;document.querySelector('#roomCodeInputWrap').hidden=true;document.querySelector('#connectCode').hidden=true;
+  try{const api=await firebaseOnline();onlineSession=await api.create(code,fresh(),receiveOnline,()=>{gameMode='online';document.querySelector('#modeName').textContent='远程在线';document.querySelector('#connectionStatus').textContent='好友已加入，对局开始！';setTimeout(()=>onlineDialog.close(),600);state=fresh();render();sendGame()});document.querySelector('#roomCodeValue').textContent=code;document.querySelector('#connectionStatus').textContent='房间已创建，等待好友加入…'}catch(e){onlineSession=null;onlineError(e)}
 };
 document.querySelector('#joinRoom').onclick=()=>{showShortFlow('请输入创建者提供的 6 位房间码。');document.querySelector('#roomCodeCard').hidden=true;document.querySelector('#roomCodeInputWrap').hidden=false;document.querySelector('#connectCode').hidden=false;document.querySelector('#roomCodeInput').value='';setTimeout(()=>document.querySelector('#roomCodeInput').focus(),100)};
 document.querySelector('#roomCodeInput').oninput=e=>e.target.value=e.target.value.replace(/\D/g,'').slice(0,6);
-document.querySelector('#connectCode').onclick=()=>{
-  const code=document.querySelector('#roomCodeInput').value;if(code.length!==6){document.querySelector('#connectionStatus').textContent='请输入完整的 6 位房间码。';return}if(typeof Peer==='undefined'){document.querySelector('#connectionStatus').textContent='在线组件加载失败，请检查网络并刷新页面。';return}
-  leaveOnline();onlinePlayer=1;document.querySelector('#connectionStatus').textContent='正在加入房间…';peer=new Peer(peerOptions());peer.on('open',()=>bindShortChannel(peer.connect('morris-'+code,{reliable:true})));peer.on('error',handlePeerError);
+document.querySelector('#connectCode').onclick=async()=>{
+  const code=document.querySelector('#roomCodeInput').value;if(code.length!==6){document.querySelector('#connectionStatus').textContent='请输入完整的 6 位房间码。';return}
+  leaveOnline();onlinePlayer=1;document.querySelector('#connectionStatus').textContent='正在加入云端房间…';
+  try{const api=await firebaseOnline();onlineSession=await api.join(code,receiveOnline);gameMode='online';document.querySelector('#modeName').textContent='远程在线';document.querySelector('#connectionStatus').textContent='连接成功，对局开始！';setTimeout(()=>onlineDialog.close(),600);render()}catch(e){onlineSession=null;onlineError(e)}
 };
+document.querySelector('#closeOnline').onclick=()=>onlineDialog.close();
