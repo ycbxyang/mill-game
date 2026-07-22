@@ -84,7 +84,7 @@ function queueAI(){
 }
 function aiMove(){
   if(gameMode!=='ai'||state.turn===humanPlayer||state.winner!==null)return;aiBusy=true;render();
-  if(!aiWorker){aiWorker=new Worker('ai-worker.js');aiWorker.onmessage=e=>{const {move}=e.data;if(!move||gameMode!=='ai'||state.turn===humanPlayer){aiBusy=false;render();return}if(move.from!==null)rawClickPoint(move.from);rawClickPoint(move.to);if(move.remove!==null&&state.removing)rawClickPoint(move.remove);aiBusy=false;render();queueAI()}}
+  if(!aiWorker){aiWorker=new Worker('ai-worker.js');aiWorker.onmessage=e=>{const {id,move}=e.data;if(id!==aiRequest)return;if(!move||gameMode!=='ai'||state.turn===humanPlayer){aiBusy=false;render();return}if(move.from!==null)rawClickPoint(move.from);rawClickPoint(move.to);if(move.remove!==null&&state.removing)rawClickPoint(move.remove);aiBusy=false;render();queueAI()};aiWorker.onerror=()=>{aiBusy=false;document.querySelector('#statusText').textContent='AI 引擎加载失败，请刷新页面重试'}}
   aiWorker.postMessage({id:++aiRequest,state:{board:[...state.board],hand:[...state.hand],turn:state.turn},level:aiLevel});
 }
 
