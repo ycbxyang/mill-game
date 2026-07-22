@@ -88,6 +88,11 @@
     <div id="onlineStart"><p class="dialog-note">通过邀请文本建立浏览器间的加密连接。无需账号，双方不必在同一网络。</p><div class="online-actions"><button id="createRoom" class="primary">创建对局</button><button id="joinRoom">加入对局</button></div></div>
     <div id="onlineFlow" hidden>
       <p class="connection-status" id="connectionStatus">正在准备连接…</p>
+      <div id="shortCodeUI">
+        <div id="roomCodeCard" hidden><small>你的房间码</small><strong id="roomCodeValue">------</strong><span>把这 6 位数字告诉好友</span></div>
+        <label id="roomCodeInputWrap" hidden><span>输入好友的 6 位房间码</span><input id="roomCodeInput" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code"></label>
+        <button id="connectCode" class="primary wide" hidden>加入对局</button>
+      </div>
       <label id="signalInputWrap" hidden><span id="signalInputLabel">粘贴好友发来的文本</span><textarea id="signalInput" rows="4" placeholder="粘贴完整邀请文本"></textarea></label>
       <label id="signalOutputWrap" hidden><span>复制下面的文本发给好友</span><textarea id="signalOutput" rows="4" readonly></textarea></label>
       <div class="online-actions"><button id="applySignal" class="primary" hidden>确认</button><button id="copySignal" hidden>复制文本</button></div>
@@ -115,7 +120,9 @@
   </dialog>
   <style>
     .mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.mode-option{min-height:128px;border:1px solid rgba(238,229,207,.14);border-radius:16px;background:rgba(255,255,255,.04);color:var(--ink);padding:15px 8px;cursor:pointer;transition:.2s}.mode-option:hover{border-color:var(--gold);transform:translateY(-2px)}.mode-option>span{display:block;color:var(--gold);font-size:1.6rem;margin-bottom:8px}.mode-option b,.mode-option small{display:block}.mode-option small{color:var(--muted);font-size:.68rem;margin-top:5px}.ai-settings{margin-top:15px;padding:15px;border-radius:15px;background:rgba(0,0,0,.15)}.ai-settings label{display:flex;align-items:center;justify-content:space-between;margin:8px 0;color:#c4c4b9;font-size:.83rem}select{color:var(--ink);background:#26382e;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:7px}.dialog-note{color:var(--muted);font-size:.83rem;line-height:1.55}.online-actions{display:flex;gap:10px;margin-top:15px}.online-actions button{flex:1;border:1px solid rgba(238,229,207,.2);color:var(--ink);background:rgba(255,255,255,.05);border-radius:12px;padding:11px;cursor:pointer}.connection-status{padding:10px 12px;border-left:3px solid var(--gold);background:rgba(215,168,75,.08);font-size:.82rem}.online-dialog label{display:block;margin-top:12px;color:var(--muted);font-size:.75rem}.online-dialog textarea{display:block;width:100%;resize:vertical;margin-top:6px;border:1px solid rgba(255,255,255,.15);border-radius:10px;background:#101a15;color:#d9d6cb;padding:10px;font:11px/1.35 monospace}.controls{flex-wrap:wrap}@media(max-width:520px){.mode-grid{grid-template-columns:1fr}.mode-option{min-height:70px}.mode-option>span{display:inline;margin-right:8px}}
+    #roomCodeCard{text-align:center;padding:18px;margin-top:12px;border:1px solid rgba(215,168,75,.35);border-radius:16px;background:rgba(215,168,75,.07)}#roomCodeCard small,#roomCodeCard span{display:block;color:var(--muted);font-size:.72rem}#roomCodeCard strong{display:block;margin:8px 0;color:var(--gold);font:700 2.4rem/1 monospace;letter-spacing:.22em}#roomCodeInput{display:block;width:100%;margin-top:7px;padding:13px;text-align:center;color:var(--ink);background:#101a15;border:1px solid rgba(255,255,255,.18);border-radius:11px;font:700 1.7rem monospace;letter-spacing:.25em}
   </style>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
