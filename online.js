@@ -1,6 +1,6 @@
 import{initializeApp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import{getAuth,signInAnonymously}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import{getDatabase,ref,onValue,runTransaction,update,remove,serverTimestamp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
+import{getDatabase,ref,get,onValue,runTransaction,update,remove,serverTimestamp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
 import{firebaseConfig}from'./firebase-config.js';
 
 let app,auth,database,userPromise;
@@ -34,18 +34,21 @@ async function create(code,callbacks){
 }
 async function join(code,callbacks){
   callbacks.onStatus?.('正在查找房间…');const current=await user(),roomRef=ref(database,`rooms/${code}`);
-  let result;
+  let roomSnapshot;
   for(let attempt=0;attempt<6;attempt++){
-    result=await runTransaction(roomRef,value=>{
-      if(value===null||value.guestUid)return;
-      return{...value,guestUid:current.uid,status:'playing'};
-    },{applyLocally:false});
-    if(result.committed||result.snapshot.exists())break;
+    roomSnapshot=await get(roomRef);
+    if(roomSnapshot.exists())break;
     callbacks.onStatus?.('房间正在建立，自动重试…');
     await new Promise(resolve=>setTimeout(resolve,600));
   }
-  if(!result.committed)throw coded(result.snapshot.exists()?'ROOM_FULL':'ROOM_NOT_FOUND',result.snapshot.exists()?'房间已有两位玩家':'找不到该房间');
-  const room=result.snapshot.val();if(room.state)callbacks.onState?.(room.state);
+  if(!roomSnapshot?.exists())throw coded('ROOM_NOT_FOUND','找不到该房间');
+  const room=roomSnapshot.val();
+  if(room.guestUid)throw coded('ROOM_FULL','房间已有两位玩家');
+  const guestRef=ref(database,`rooms/${code}/guestUid`);
+  const result=await runTransaction(guestRef,value=>value===null?current.uid:undefined,{applyLocally:false});
+  if(!result.committed)throw coded('ROOM_FULL','房间已有两位玩家');
+  await update(roomRef,{status:'playing',updatedAt:serverTimestamp()});
+  if(room.state)callbacks.onState?.(room.state);
   const unsubscribe=onValue(roomRef,snapshot=>{
     const value=snapshot.val();if(!value){callbacks.onClose?.();return}
     if(value.state&&value.lastWriter!==current.uid)callbacks.onState?.(value.state);
