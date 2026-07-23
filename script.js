@@ -7,13 +7,14 @@ const POSITIONS=[
 const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
 const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
 const NAMES=['象牙白','曜石黑'];
-const AI_WORKER_VERSION='0.2.2';
+const AI_WORKER_VERSION='0.3.0';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
 let aiWorker=null,aiRequest=0,aiThinking=false,aiTimer=null,aiWatchdog=null;
+let onlineSession=null,onlinePlayer=null,onlineReady=false,onlineMessage='';
 
-function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,last:null,history:[]}}
+function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,winnerReason:null,last:null,history:[]}}
 function snapshot(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:null,last:state.last}}
 function restore(saved){const history=state.history;state={...saved,board:[...saved.board],hand:[...saved.hand],history}}
 function pieces(player,board=state.board){return board.reduce((list,value,index)=>(value===player&&list.push(index),list),[])}
@@ -21,14 +22,16 @@ function inMill(index,player,board=state.board){return MILLS.some(mill=>mill.inc
 function legalTargets(from,player){const empty=state.board.map((value,index)=>value===null?index:null).filter(index=>index!==null);return pieces(player).length===3?empty:ADJ[from].filter(index=>state.board[index]===null)}
 function removablePieces(player){const all=pieces(player),outside=all.filter(index=>!inMill(index,player));return outside.length?outside:all}
 function canMove(player){return pieces(player).some(index=>legalTargets(index,player).length>0)}
-function isHumanTurn(){return mode==='local'||state.turn===humanPlayer}
+function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPlayer||mode==='online'&&onlineReady&&state.turn===onlinePlayer}
 
 function startGame(){
-  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();queueAI();
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();
+  if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
 }
 function saveTurn(){state.history.push(snapshot())}
 function finishTurn(){
-  state.selected=null;state.removing=false;state.turn=1-state.turn;checkWinner();render();queueAI();
+  state.selected=null;state.removing=false;state.turn=1-state.turn;checkWinner();render();
+  if(mode==='online')sendOnlineState();else queueAI();
 }
 function checkWinner(){
   if(state.hand[0]+state.hand[1]>0)return;const player=state.turn;
@@ -36,8 +39,9 @@ function checkWinner(){
   if(!canMove(player))declareWinner(1-player,'对手已无路可走');
 }
 function declareWinner(player,reason){
-  state.winner=player;render();$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');$('#winDialog').showModal();
+  state.winner=player;state.winnerReason=reason;render();showWinner(player,reason);
 }
+function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');if(!$('#winDialog').open)$('#winDialog').showModal()}
 function handlePoint(index){
   if(state.winner!==null||aiThinking||!isHumanTurn())return;
   const player=state.turn;
@@ -53,7 +57,7 @@ function handlePoint(index){
   if(inMill(index,player)){state.removing=true;render()}else finishTurn();
 }
 function undo(){
-  if(!state.history.length||aiThinking)return;aiRequest++;clearTimeout(aiTimer);
+  if(!state.history.length||aiThinking||mode==='online')return;aiRequest++;clearTimeout(aiTimer);
   restore(state.history.pop());
   if(mode==='ai')while(state.turn!==humanPlayer&&state.history.length)restore(state.history.pop());
   aiThinking=false;render();queueAI();
@@ -104,7 +108,8 @@ function removablePiecesOn(board,player){
 
 function phaseLabel(){if(state.hand[0]+state.hand[1]>0)return'布子阶段';return pieces(state.turn).length===3?'飞行阶段':'走子阶段'}
 function statusMessage(counts){
-  if(aiThinking)return'电脑正在思考…';if(!isHumanTurn())return'等待电脑行动…';
+  if(mode==='online'&&!onlineReady)return onlineMessage||'正在连接在线房间…';
+  if(aiThinking)return'电脑正在思考…';if(!isHumanTurn())return mode==='online'?'等待对手行动…':'等待电脑行动…';
   if(state.removing)return`${NAMES[state.turn]}已连成磨坊，请移除一枚对方棋子`;
   if(state.hand[state.turn]>0)return`${NAMES[state.turn]}回合，请选择一个交点落子`;
   if(state.selected!==null)return`已选中棋子，请选择${counts[state.turn]===3?'任意空位':'相邻空位'}`;
@@ -122,18 +127,62 @@ function render(){
   });
   const counts=[pieces(0).length,pieces(1).length];
   $('#whiteBoard').textContent=counts[0];$('#blackBoard').textContent=counts[1];$('#whiteHand').textContent=state.hand[0];$('#blackHand').textContent=state.hand[1];$('#phaseLabel').textContent=phaseLabel();$('#statusText').textContent=statusMessage(counts);
-  $('#playerCard0').classList.toggle('active',state.turn===0);$('#playerCard1').classList.toggle('active',state.turn===1);$('#undoButton').disabled=!state.history.length||aiThinking;
+  $('#playerCard0').classList.toggle('active',state.turn===0);$('#playerCard1').classList.toggle('active',state.turn===1);$('#undoButton').disabled=!state.history.length||aiThinking||mode==='online';
   [['#whiteCaptured',9-state.hand[1]-counts[1]],['#blackCaptured',9-state.hand[0]-counts[0]]].forEach(([selector,total])=>$(selector).innerHTML='<i></i>'.repeat(Math.max(0,total)));
+}
+
+function onlineState(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:state.winner,winnerReason:state.winnerReason,last:state.last}}
+function sendOnlineState(){onlineSession?.sendState(onlineState())}
+function receiveOnlineState(remote){
+  state={...remote,board:[...remote.board],hand:[...remote.hand],history:[]};render();
+  if(state.winner!==null)showWinner(state.winner,state.winnerReason||'在线对局已结束');
+}
+function leaveOnline(){
+  onlineSession?.close();onlineSession=null;onlinePlayer=null;onlineReady=false;onlineMessage='';
+}
+function onlineCallbacks(statusElement){
+  return{
+    onStatus:message=>{onlineMessage=message;statusElement.textContent=message;render()},
+    onReady:player=>{
+      onlinePlayer=player;onlineReady=true;mode='online';onlineMessage='';$('#modeName').textContent='远程联机';
+      if(player===0)startGame();else render();setTimeout(()=>modeDialog.close(),500);
+    },
+    onState:receiveOnlineState,
+    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';render()}
+  };
+}
+function onlineAPI(){
+  return new Promise((resolve,reject)=>{
+    if(window.OnlineMorris)return resolve(window.OnlineMorris);
+    const timer=setTimeout(()=>reject(new Error('在线模块加载失败，请检查网络后刷新页面')),10000);
+    window.addEventListener('online-morris-ready',()=>{clearTimeout(timer);resolve(window.OnlineMorris)},{once:true});
+  });
 }
 
 const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
 $('#modeButton').onclick=()=>modeDialog.showModal();$('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
 document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
   document.querySelectorAll('.mode-option').forEach(option=>option.classList.toggle('selected',option===button));
-  if(button.dataset.mode==='local'){mode='local';$('#modeName').textContent='本地双人';$('#aiSettings').hidden=true;modeDialog.close();startGame()}
-  else $('#aiSettings').hidden=false;
+  const selected=button.dataset.mode;
+  $('#aiSettings').hidden=selected!=='ai';$('#onlineSettings').hidden=selected!=='online';
+  if(selected==='local'){leaveOnline();mode='local';$('#modeName').textContent='本地双人';modeDialog.close();startGame()}
 });
-$('#startAI').onclick=()=>{mode='ai';humanPlayer=Number($('#humanColor').value);aiLevel=$('#aiLevel').value;$('#modeName').textContent='人机对战';modeDialog.close();startGame()};
+$('#startAI').onclick=()=>{leaveOnline();mode='ai';humanPlayer=Number($('#humanColor').value);aiLevel=$('#aiLevel').value;$('#modeName').textContent='人机对战';modeDialog.close();startGame()};
+$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#roomInput').focus()};
+$('#roomInput').oninput=event=>event.target.value=event.target.value.replace(/\D/g,'').slice(0,6);
+$('#createRoom').onclick=async()=>{
+  leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';render();
+  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;
+  const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent=code;$('#onlineStatus').textContent=onlineMessage;
+  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')))}
+  catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
+};
+$('#joinRoom').onclick=async()=>{
+  const code=$('#roomInput').value;if(code.length!==6){$('#joinStatus').textContent='请输入完整的 6 位房间码';return}
+  leaveOnline();mode='online';onlinePlayer=1;onlineMessage='正在连接在线服务器…';$('#joinStatus').textContent=onlineMessage;render();
+  try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')))}
+  catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
+};
 $('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=()=>{$('#winDialog').close();startGame()};
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
 startGame();
