@@ -41,11 +41,12 @@ function tacticalRank(s,m,p,ttMove,ply){
 }
 function ordered(s,list,ttMove,ply){const p=s.turn;return list.sort((a,b)=>tacticalRank(s,b,p,ttMove,ply)-tacticalRank(s,a,p,ttMove,ply))}
 function quiet(s,alpha,beta,ply,path){
+  if(performance.now()>deadline)throw new Error('TIME');
   const stand=evaluate(s);if(stand>=beta)return beta;if(stand>alpha)alpha=stand;if(ply>=3)return alpha;
   const forcing=generate(s).filter(m=>m.remove!==null);for(const m of ordered(s,forcing,null,ply)){const k=stateKey(apply(s,m));if(path.has(k))continue;path.add(k);const score=-quiet(apply(s,m),-beta,-alpha,ply+1,path);path.delete(k);if(score>=beta)return beta;if(score>alpha)alpha=score}return alpha;
 }
 function negamax(s,depth,alpha,beta,ply,path,extensionBudget){
-  if((++nodes&2047)===0&&performance.now()>deadline)throw new Error('TIME');const end=terminal(s,ply);if(end!==null)return end;
+  if((++nodes&255)===0&&performance.now()>deadline)throw new Error('TIME');const end=terminal(s,ply);if(end!==null)return end;
   const sk=stateKey(s);if(path.has(sk))return 0;if(depth<=0)return quiet(s,alpha,beta,0,path);
   const alpha0=alpha,tk=sk+'|'+depth,hit=tt.get(tk);if(hit){if(hit.flag==='EXACT')return hit.score;if(hit.flag==='LOWER')alpha=Math.max(alpha,hit.score);else beta=Math.min(beta,hit.score);if(alpha>=beta)return hit.score}
   const list=ordered(s,generate(s),hit?.move,ply);if(!list.length)return-WIN+ply;let best=-INF,bestMove=null;path.add(sk);
@@ -57,12 +58,12 @@ function rootSearch(s,depth){
   const captures=candidates.filter(m=>m.remove!==null);if(captures.length)candidates=captures;
   else{const opponentThreat=generate({...s,turn:1-s.turn}).some(m=>m.remove!==null);if(opponentThreat){const safe=candidates.filter(m=>!generate(apply(s,m)).some(reply=>reply.remove!==null));if(safe.length)candidates=safe}}
   const list=ordered(s,candidates,prior?.move,0),result=[];let alpha=-INF;
-  for(const m of list){const child=apply(s,m),path=new Set([rootKey]);const score=-negamax(child,depth-1,-INF,-alpha,1,path,2);result.push({m,score});if(score>alpha)alpha=score}
+  for(const m of list){if(performance.now()>deadline)throw new Error('TIME');const child=apply(s,m),path=new Set([rootKey]);const score=-negamax(child,depth-1,-INF,-alpha,1,path,2);result.push({m,score});if(score>alpha)alpha=score}
   result.sort((a,b)=>b.score-a.score);return result;
 }
 self.onmessage=e=>{
   const {state,level,id}=e.data,s={board:state.board.map(x=>x===null?-1:x),hand:[...state.hand],turn:state.turn,noCapture:0};
-  const cfg={easy:{depth:3,time:400},medium:{depth:6,time:1800},hard:{depth:12,time:6000}}[level]||{depth:6,time:1800};deadline=performance.now()+(e.data.time||cfg.time);nodes=0;tt=new Map();killers=[];history=new Map();age++;let result=[],completed=0;
+  const cfg={easy:{depth:3,time:150},medium:{depth:6,time:400},hard:{depth:12,time:1000}}[level]||{depth:6,time:400};deadline=performance.now()+(e.data.time||cfg.time);nodes=0;tt=new Map();killers=[];history=new Map();age++;let result=[],completed=0;
   for(let d=1;d<=cfg.depth;d++){try{const r=rootSearch(s,d);if(r.length){result=r;completed=d;if(Math.abs(r[0].score)>WIN-100)break}}catch(err){if(err.message!=='TIME')throw err;break}}
   if(!result.length)return self.postMessage({id,move:null,nodes,depth:completed});let choice=result[0];if(level==='easy'){const pool=result.filter(x=>x.score>=result[0].score-80).slice(0,5);choice=pool[Math.floor(Math.random()*pool.length)]}
   self.postMessage({id,move:choice.m,nodes,depth:completed,score:choice.score});

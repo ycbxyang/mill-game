@@ -60,7 +60,7 @@ function undo(){
 
 function queueAI(){
   clearTimeout(aiTimer);if(mode!=='ai'||state.winner!==null||state.turn===humanPlayer)return;
-  aiThinking=true;render();aiTimer=setTimeout(requestAIMove,220);
+  aiThinking=true;render();aiTimer=setTimeout(requestAIMove,80);
 }
 function requestAIMove(){
   if(!aiWorker){
