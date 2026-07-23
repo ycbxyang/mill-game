@@ -1,6 +1,6 @@
 import{initializeApp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import{getAuth,signInAnonymously}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import{getDatabase,ref,onValue,runTransaction,update,remove,onDisconnect,serverTimestamp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
+import{getDatabase,ref,onValue,runTransaction,update,remove,serverTimestamp}from'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
 import{firebaseConfig}from'./firebase-config.js';
 
 let app,auth,database,userPromise;
@@ -29,22 +29,28 @@ async function create(code,callbacks){
     if(room.guestUid&&!started){started=true;callbacks.onStatus?.('好友已加入，对局开始');callbacks.onReady?.(0)}
     if(room.state&&room.lastWriter!==current.uid)callbacks.onState?.(room.state);
   },error=>callbacks.onStatus?.('同步失败：'+error.message));
-  session=new Room(roomRef,current.uid,'host',callbacks,unsubscribe);onDisconnect(roomRef).remove();
+  session=new Room(roomRef,current.uid,'host',callbacks,unsubscribe);
   callbacks.onStatus?.('房间已创建，等待好友加入…');return session;
 }
 async function join(code,callbacks){
   callbacks.onStatus?.('正在查找房间…');const current=await user(),roomRef=ref(database,`rooms/${code}`);
-  const result=await runTransaction(roomRef,value=>{
-    if(value===null||value.guestUid)return;
-    return{...value,guestUid:current.uid,status:'playing'};
-  },{applyLocally:false});
+  let result;
+  for(let attempt=0;attempt<6;attempt++){
+    result=await runTransaction(roomRef,value=>{
+      if(value===null||value.guestUid)return;
+      return{...value,guestUid:current.uid,status:'playing'};
+    },{applyLocally:false});
+    if(result.committed||result.snapshot.exists())break;
+    callbacks.onStatus?.('房间正在建立，自动重试…');
+    await new Promise(resolve=>setTimeout(resolve,600));
+  }
   if(!result.committed)throw coded(result.snapshot.exists()?'ROOM_FULL':'ROOM_NOT_FOUND',result.snapshot.exists()?'房间已有两位玩家':'找不到该房间');
   const room=result.snapshot.val();if(room.state)callbacks.onState?.(room.state);
   const unsubscribe=onValue(roomRef,snapshot=>{
     const value=snapshot.val();if(!value){callbacks.onClose?.();return}
     if(value.state&&value.lastWriter!==current.uid)callbacks.onState?.(value.state);
   },error=>callbacks.onStatus?.('同步失败：'+error.message));
-  const session=new Room(roomRef,current.uid,'guest',callbacks,unsubscribe);onDisconnect(roomRef).remove();
+  const session=new Room(roomRef,current.uid,'guest',callbacks,unsubscribe);
   callbacks.onStatus?.('连接成功，对局开始');callbacks.onReady?.(1);return session;
 }
 window.OnlineMorris={create,join,configured};

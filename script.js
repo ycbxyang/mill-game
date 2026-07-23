@@ -7,7 +7,7 @@ const POSITIONS=[
 const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
 const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
 const NAMES=['象牙白','曜石黑'];
-const AI_WORKER_VERSION='0.3.0';
+const AI_WORKER_VERSION='0.3.1';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
@@ -173,8 +173,8 @@ $('#roomInput').oninput=event=>event.target.value=event.target.value.replace(/\D
 $('#createRoom').onclick=async()=>{
   leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';render();
   $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;
-  const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent=code;$('#onlineStatus').textContent=onlineMessage;
-  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')))}
+  const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;
+  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')));$('#roomCode').textContent=code}
   catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
 };
 $('#joinRoom').onclick=async()=>{
