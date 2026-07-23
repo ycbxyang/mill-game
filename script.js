@@ -7,10 +7,11 @@ const POSITIONS=[
 const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
 const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
 const NAMES=['象牙白','曜石黑'];
+const AI_WORKER_VERSION='0.2.2';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
-let aiWorker=null,aiRequest=0,aiThinking=false,aiTimer=null;
+let aiWorker=null,aiRequest=0,aiThinking=false,aiTimer=null,aiWatchdog=null;
 
 function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,last:null,history:[]}}
 function snapshot(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:null,last:state.last}}
@@ -23,7 +24,7 @@ function canMove(player){return pieces(player).some(index=>legalTargets(index,pl
 function isHumanTurn(){return mode==='local'||state.turn===humanPlayer}
 
 function startGame(){
-  clearTimeout(aiTimer);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();queueAI();
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();queueAI();
 }
 function saveTurn(){state.history.push(snapshot())}
 function finishTurn(){
@@ -64,18 +65,41 @@ function queueAI(){
 }
 function requestAIMove(){
   if(!aiWorker){
-    aiWorker=new Worker('ai-worker.js');
+    aiWorker=new Worker(`ai-worker.js?v=${AI_WORKER_VERSION}`);
     aiWorker.onmessage=event=>applyAIMove(event.data);
     aiWorker.onerror=()=>{aiThinking=false;$('#statusText').textContent='AI 引擎加载失败，请刷新页面重试'};
   }
   const id=++aiRequest;aiWorker.postMessage({id,state:{board:[...state.board],hand:[...state.hand],turn:state.turn},level:aiLevel});
+  const limit={easy:700,medium:1100,hard:1800}[aiLevel];clearTimeout(aiWatchdog);aiWatchdog=setTimeout(()=>forceAIMove(id),limit);
 }
 function applyAIMove({id,move}){
   if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
+  clearTimeout(aiWatchdog);
   if(!move){aiThinking=false;render();return}
   const player=state.turn;saveTurn();
   if(move.from===null)state.hand[player]--;else state.board[move.from]=null;
   state.board[move.to]=player;if(move.remove!==null)state.board[move.remove]=null;state.last=move.to;aiThinking=false;finishTurn();
+}
+function forceAIMove(id){
+  if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
+  if(aiWorker){aiWorker.terminate();aiWorker=null}
+  applyAIMove({id,move:fallbackAIMove()});
+}
+function fallbackAIMove(){
+  const player=state.turn,empty=state.board.map((value,index)=>value===null?index:null).filter(index=>index!==null),moves=[];
+  const froms=state.hand[player]>0?[null]:pieces(player),flying=state.hand[player]===0&&froms.length===3;
+  froms.forEach(from=>{
+    const targets=from===null||flying?empty:ADJ[from].filter(index=>state.board[index]===null);
+    targets.forEach(to=>{
+      const board=[...state.board];if(from!==null)board[from]=null;board[to]=player;
+      const captures=inMill(to,player,board)?removablePiecesOn(board,1-player):[null];
+      captures.forEach(remove=>moves.push({from,to,remove,score:(remove!==null?10000:0)+ADJ[to].length*20+Math.random()}));
+    });
+  });
+  moves.sort((a,b)=>b.score-a.score);return moves[0]||null;
+}
+function removablePiecesOn(board,player){
+  const all=pieces(player,board),outside=all.filter(index=>!inMill(index,player,board));return outside.length?outside:all;
 }
 
 function phaseLabel(){if(state.hand[0]+state.hand[1]>0)return'布子阶段';return pieces(state.turn).length===3?'飞行阶段':'走子阶段'}
@@ -105,6 +129,7 @@ function render(){
 const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
 $('#modeButton').onclick=()=>modeDialog.showModal();$('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
 document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
+  document.querySelectorAll('.mode-option').forEach(option=>option.classList.toggle('selected',option===button));
   if(button.dataset.mode==='local'){mode='local';$('#modeName').textContent='本地双人';$('#aiSettings').hidden=true;modeDialog.close();startGame()}
   else $('#aiSettings').hidden=false;
 });

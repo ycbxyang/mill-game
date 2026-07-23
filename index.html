@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#17231d" />
   <title>磨坊棋 v0.2 · Nine Men's Morris</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=0.2.2" />
 </head>
 <body>
   <main class="game-shell">
@@ -69,15 +69,28 @@
 
   <dialog id="modeDialog" class="mode-dialog">
     <button class="dialog-close" data-close="modeDialog" aria-label="关闭">×</button>
-    <p class="eyebrow">GAME MODE</p><h2>选择对战方式</h2>
-    <div class="mode-grid">
-      <button class="mode-option" data-mode="local"><span>◐</span><b>本地双人</b><small>两位玩家共用此设备</small></button>
-      <button class="mode-option" data-mode="ai"><span>✦</span><b>人机对战</b><small>挑战策略型电脑对手</small></button>
+    <div class="mode-heading">
+      <p class="eyebrow">NEW MATCH</p>
+      <h2>开始新对局</h2>
+      <p>选择一种对战方式</p>
+    </div>
+    <div class="mode-list">
+      <button class="mode-option" data-mode="local">
+        <span class="mode-icon">◐</span>
+        <span class="mode-copy"><b>本地双人</b><small>两位玩家共用这台设备</small></span>
+        <span class="mode-arrow">›</span>
+      </button>
+      <button class="mode-option" data-mode="ai">
+        <span class="mode-icon">✦</span>
+        <span class="mode-copy"><b>人机对战</b><small>选择难度和先后手挑战电脑</small></span>
+        <span class="mode-arrow">›</span>
+      </button>
     </div>
     <div class="ai-settings" id="aiSettings" hidden>
-      <label>电脑难度<select id="aiLevel"><option value="easy">轻松</option><option value="medium" selected>进阶</option><option value="hard">高手</option></select></label>
-      <label>你的棋色<select id="humanColor"><option value="0">象牙白（先手）</option><option value="1">曜石黑（后手）</option></select></label>
-      <button class="primary wide" id="startAI">开始挑战</button>
+      <div class="settings-divider"><span>对局设置</span></div>
+      <label class="setting-row"><span><b>电脑难度</b><small>决定搜索深度与思考时间</small></span><select id="aiLevel"><option value="easy">轻松</option><option value="medium" selected>进阶</option><option value="hard">高手</option></select></label>
+      <label class="setting-row"><span><b>你的棋色</b><small>象牙白总是先手</small></span><select id="humanColor"><option value="0">象牙白 · 先手</option><option value="1">曜石黑 · 后手</option></select></label>
+      <button class="primary start-match" id="startAI">开始挑战 <span>→</span></button>
     </div>
   </dialog>
 
@@ -100,6 +113,6 @@
     <p id="winnerReason"></p>
     <button class="primary wide" id="playAgain">再来一局</button>
   </dialog>
-  <script src="script.js"></script>
+  <script src="script.js?v=0.2.2"></script>
 </body>
 </html>
