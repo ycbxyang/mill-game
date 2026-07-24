@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101914">
+  <title>黑白棋 · 棋类合集</title>
+  <link rel="stylesheet" href="../shared/game.css?v=2.0.0-alpha.1">
+  <link rel="stylesheet" href="style.css?v=2.0.0-alpha.1">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="topbar">
+      <div>
+        <a class="home-link" href="../../index.html">← 游戏大厅</a>
+        <p class="eyebrow">OTHELLO · REVERSI</p>
+        <h1>黑白棋 <small>v2 α</small></h1>
+        <p class="subtitle">夹住、翻转，让自己的颜色占领棋盘。</p>
+      </div>
+      <button class="ghost-button" id="rulesButton">游戏规则</button>
+    </header>
+
+    <section class="match-layout">
+      <aside class="player-card active" id="playerCard0">
+        <div class="player-heading"><span class="player-disc"></span><span><small>PLAYER ONE</small><strong>曜石黑</strong></span></div>
+        <div class="player-stat"><span>棋盘数量</span><b id="score0">2</b></div>
+      </aside>
+
+      <section class="board-panel">
+        <div class="status-wrap" aria-live="polite">
+          <span class="phase" id="phaseLabel">占领阶段</span>
+          <p id="statusText">曜石黑先手，请选择标记位置</p>
+        </div>
+        <div class="board-card othello-frame">
+          <div class="othello-board" id="board" role="grid" aria-label="黑白棋棋盘"></div>
+        </div>
+        <div class="controls">
+          <button id="modeButton">♟ <b id="modeName">本地双人</b></button>
+          <button id="undoButton" disabled>↶ 撤销一步</button>
+          <button id="restartButton" class="primary">↻ 重新开始</button>
+        </div>
+        <p class="sync-warning" id="syncWarning"></p>
+      </section>
+
+      <aside class="player-card player-one" id="playerCard1">
+        <div class="player-heading"><span class="player-disc"></span><span><small>PLAYER TWO</small><strong>象牙白</strong></span></div>
+        <div class="player-stat"><span>棋盘数量</span><b id="score1">2</b></div>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="modeDialog">
+    <button class="dialog-close" data-close="modeDialog" aria-label="关闭">×</button>
+    <div class="dialog-inner">
+      <p class="eyebrow">NEW MATCH</p>
+      <h2>选择对战方式</h2>
+      <p class="dialog-copy">棋盘始终由曜石黑先手。</p>
+      <div class="mode-list">
+        <button class="mode-option selected" data-mode="local"><span class="mode-icon">◐</span><span class="mode-copy"><b>本地双人</b><small>两位玩家共用这台设备</small></span><span class="mode-arrow">›</span></button>
+        <button class="mode-option" data-mode="ai"><span class="mode-icon">✦</span><span class="mode-copy"><b>人机对战</b><small>选择难度与先后手</small></span><span class="mode-arrow">›</span></button>
+        <button class="mode-option" data-mode="online"><span class="mode-icon">⌁</span><span class="mode-copy"><b>远程联机</b><small>使用六位房间码邀请好友</small></span><span class="mode-arrow">›</span></button>
+      </div>
+
+      <div class="settings" id="aiSettings" hidden>
+        <label class="setting-row"><span><b>电脑难度</b><small>根据局面限制搜索时间</small></span><select id="aiLevel"><option value="easy">轻松</option><option value="medium" selected>进阶</option><option value="hard">高手</option></select></label>
+        <label class="setting-row"><span><b>你的棋色</b><small>曜石黑总是先手</small></span><select id="humanColor"><option value="0">曜石黑 · 先手</option><option value="1">象牙白 · 后手</option></select></label>
+        <button class="primary wide" id="startAI">开始挑战 →</button>
+      </div>
+
+      <div class="settings" id="onlineSettings" hidden>
+        <p class="online-note">双方打开黑白棋，输入相同房间码即可实时对战。</p>
+        <div class="online-choice" id="onlineChoice"><button class="primary" id="createRoom">创建房间</button><button id="showJoinRoom">加入房间</button></div>
+        <div class="room-card" id="roomCard" hidden><small>房间码</small><strong id="roomCode">------</strong><p id="onlineStatus">正在连接服务器…</p></div>
+        <div class="join-form" id="joinForm" hidden><input id="roomInput" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code"><button class="primary wide" id="joinRoom">加入对局 →</button><p id="joinStatus"></p></div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="rulesDialog">
+    <button class="dialog-close" id="closeRules" aria-label="关闭">×</button>
+    <div class="dialog-inner">
+      <p class="eyebrow">HOW TO PLAY</p><h2>黑白棋规则</h2>
+      <ol class="rules-list">
+        <li>曜石黑先手，落子必须在至少一个方向夹住对方棋子。</li>
+        <li>横向、纵向或斜向被夹住的对方棋子会全部翻转。</li>
+        <li>如果当前一方没有合法位置，系统会自动跳过该回合。</li>
+        <li>双方都无法落子或棋盘填满时结束，棋子更多的一方获胜。</li>
+      </ol>
+      <button class="primary wide" id="gotIt">明白了</button>
+    </div>
+  </dialog>
+
+  <dialog id="winDialog" class="win-dialog">
+    <div class="dialog-inner">
+      <div class="winner-mark" id="winnerMark"></div>
+      <p class="eyebrow">GAME OVER</p><h2 id="winnerTitle">曜石黑获胜</h2>
+      <p class="dialog-copy" id="winnerReason"></p>
+      <button class="primary wide" id="playAgain">再来一局</button>
+    </div>
+  </dialog>
+
+  <script src="game.js?v=2.0.0-alpha.1"></script>
+</body>
+</html>

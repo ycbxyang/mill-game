@@ -1,0 +1,220 @@
+const POSITIONS=[
+  [9.17,9.17],[50,9.17],[90.83,9.17],[23.33,23.33],[50,23.33],[76.67,23.33],
+  [37.5,37.5],[50,37.5],[62.5,37.5],[9.17,50],[23.33,50],[37.5,50],
+  [62.5,50],[76.67,50],[90.83,50],[37.5,62.5],[50,62.5],[62.5,62.5],
+  [23.33,76.67],[50,76.67],[76.67,76.67],[9.17,90.83],[50,90.83],[90.83,90.83]
+];
+const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
+const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
+const NAMES=['象牙白','曜石黑'];
+const AI_WORKER_VERSION='2.0.0-alpha.1';
+const $=selector=>document.querySelector(selector);
+
+let state,mode='local',humanPlayer=0,aiLevel='medium';
+let aiWorker=null,aiRequest=0,aiThinking=false,aiTimer=null,aiWatchdog=null;
+let onlineSession=null,onlinePlayer=null,onlineReady=false,onlineMessage='';
+
+function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,winnerReason:null,last:null,history:[]}}
+function snapshot(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:null,last:state.last}}
+function restore(saved){const history=state.history;state={...saved,board:[...saved.board],hand:[...saved.hand],history}}
+function pieces(player,board=state.board){return board.reduce((list,value,index)=>(value===player&&list.push(index),list),[])}
+function inMill(index,player,board=state.board){return MILLS.some(mill=>mill.includes(index)&&mill.every(point=>board[point]===player))}
+function legalTargets(from,player){const empty=state.board.map((value,index)=>value===null?index:null).filter(index=>index!==null);return pieces(player).length===3?empty:ADJ[from].filter(index=>state.board[index]===null)}
+function removablePieces(player){const all=pieces(player),outside=all.filter(index=>!inMill(index,player));return outside.length?outside:all}
+function canMove(player){return pieces(player).some(index=>legalTargets(index,player).length>0)}
+function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPlayer||mode==='online'&&onlineReady&&state.turn===onlinePlayer}
+
+function startGame(){
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();
+  if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
+}
+function saveTurn(){state.history.push(snapshot())}
+function finishTurn(){
+  state.selected=null;state.removing=false;state.turn=1-state.turn;checkWinner();render();
+  if(mode==='online')sendOnlineState();else queueAI();
+}
+function checkWinner(){
+  if(state.hand[0]+state.hand[1]>0)return;const player=state.turn;
+  if(pieces(player).length<3)return declareWinner(1-player,'对手只剩下两枚棋子');
+  if(!canMove(player))declareWinner(1-player,'对手已无路可走');
+}
+function declareWinner(player,reason){
+  state.winner=player;state.winnerReason=reason;render();showWinner(player,reason);
+}
+function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');if(!$('#winDialog').open)$('#winDialog').showModal()}
+function handlePoint(index){
+  if(state.winner!==null||aiThinking||!isHumanTurn())return;
+  const player=state.turn;
+  if(state.removing){if(removablePieces(1-player).includes(index)){state.board[index]=null;state.last=null;finishTurn()}return}
+  if(state.hand[player]>0){
+    if(state.board[index]!==null)return;saveTurn();state.board[index]=player;state.hand[player]--;state.last=index;
+    if(inMill(index,player)){state.removing=true;render()}else finishTurn();return;
+  }
+  if(state.selected===null){if(state.board[index]===player){state.selected=index;render()}return}
+  if(state.board[index]===player){state.selected=index;render();return}
+  if(!legalTargets(state.selected,player).includes(index))return;
+  saveTurn();state.board[index]=player;state.board[state.selected]=null;state.selected=null;state.last=index;
+  if(inMill(index,player)){state.removing=true;render()}else finishTurn();
+}
+function undo(){
+  if(!state.history.length||aiThinking||mode==='online')return;aiRequest++;clearTimeout(aiTimer);
+  restore(state.history.pop());
+  if(mode==='ai')while(state.turn!==humanPlayer&&state.history.length)restore(state.history.pop());
+  aiThinking=false;render();queueAI();
+}
+
+function queueAI(){
+  clearTimeout(aiTimer);if(mode!=='ai'||state.winner!==null||state.turn===humanPlayer)return;
+  aiThinking=true;render();aiTimer=setTimeout(requestAIMove,80);
+}
+function requestAIMove(){
+  if(!aiWorker){
+    aiWorker=new Worker(`ai-worker.js?v=${AI_WORKER_VERSION}`);
+    aiWorker.onmessage=event=>applyAIMove(event.data);
+    aiWorker.onerror=()=>{aiThinking=false;$('#statusText').textContent='AI 引擎加载失败，请刷新页面重试'};
+  }
+  const id=++aiRequest;aiWorker.postMessage({id,state:{board:[...state.board],hand:[...state.hand],turn:state.turn},level:aiLevel});
+  const limit={easy:700,medium:1100,hard:1800}[aiLevel];clearTimeout(aiWatchdog);aiWatchdog=setTimeout(()=>forceAIMove(id),limit);
+}
+function applyAIMove({id,move}){
+  if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
+  clearTimeout(aiWatchdog);
+  if(!move){aiThinking=false;render();return}
+  const player=state.turn;saveTurn();
+  if(move.from===null)state.hand[player]--;else state.board[move.from]=null;
+  state.board[move.to]=player;if(move.remove!==null)state.board[move.remove]=null;state.last=move.to;aiThinking=false;finishTurn();
+}
+function forceAIMove(id){
+  if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
+  if(aiWorker){aiWorker.terminate();aiWorker=null}
+  applyAIMove({id,move:fallbackAIMove()});
+}
+function fallbackAIMove(){
+  const player=state.turn,empty=state.board.map((value,index)=>value===null?index:null).filter(index=>index!==null),moves=[];
+  const froms=state.hand[player]>0?[null]:pieces(player),flying=state.hand[player]===0&&froms.length===3;
+  froms.forEach(from=>{
+    const targets=from===null||flying?empty:ADJ[from].filter(index=>state.board[index]===null);
+    targets.forEach(to=>{
+      const board=[...state.board];if(from!==null)board[from]=null;board[to]=player;
+      const captures=inMill(to,player,board)?removablePiecesOn(board,1-player):[null];
+      captures.forEach(remove=>moves.push({from,to,remove,score:(remove!==null?10000:0)+ADJ[to].length*20+Math.random()}));
+    });
+  });
+  moves.sort((a,b)=>b.score-a.score);return moves[0]||null;
+}
+function removablePiecesOn(board,player){
+  const all=pieces(player,board),outside=all.filter(index=>!inMill(index,player,board));return outside.length?outside:all;
+}
+
+function phaseLabel(){if(state.hand[0]+state.hand[1]>0)return'布子阶段';return pieces(state.turn).length===3?'飞行阶段':'走子阶段'}
+function statusMessage(counts){
+  if(mode==='online'&&!onlineReady)return onlineMessage||'正在连接在线房间…';
+  if(aiThinking)return'电脑正在思考…';if(!isHumanTurn())return mode==='online'?'等待对手行动…':'等待电脑行动…';
+  if(state.removing)return`${NAMES[state.turn]}已连成磨坊，请移除一枚对方棋子`;
+  if(state.hand[state.turn]>0)return`${NAMES[state.turn]}回合，请选择一个交点落子`;
+  if(state.selected!==null)return`已选中棋子，请选择${counts[state.turn]===3?'任意空位':'相邻空位'}`;
+  return`${NAMES[state.turn]}回合，请选择一枚棋子`;
+}
+function render(){
+  const board=$('#board');board.querySelectorAll('.point').forEach(point=>point.remove());
+  const targets=state.selected===null?[]:legalTargets(state.selected,state.turn),removes=state.removing?removablePieces(1-state.turn):[];
+  POSITIONS.forEach(([x,y],index)=>{
+    const point=document.createElement('button');point.className='point';point.style.left=x+'%';point.style.top=y+'%';point.setAttribute('aria-label',`交点 ${index+1}`);
+    if(!aiThinking&&isHumanTurn()&&(targets.includes(index)||(state.hand[state.turn]>0&&state.board[index]===null&&!state.removing)))point.classList.add('valid');
+    if(index===state.selected)point.classList.add('selected');if(index===state.last)point.classList.add('last-move');if(removes.includes(index)&&isHumanTurn())point.classList.add('removable');
+    if(state.board[index]!==null){const piece=document.createElement('span');piece.className='piece '+(state.board[index]?'black':'white');point.appendChild(piece)}
+    point.onclick=()=>handlePoint(index);board.appendChild(point);
+  });
+  const counts=[pieces(0).length,pieces(1).length];
+  $('#whiteBoard').textContent=counts[0];$('#blackBoard').textContent=counts[1];$('#whiteHand').textContent=state.hand[0];$('#blackHand').textContent=state.hand[1];$('#phaseLabel').textContent=phaseLabel();$('#statusText').textContent=statusMessage(counts);
+  $('#playerCard0').classList.toggle('active',state.turn===0);$('#playerCard1').classList.toggle('active',state.turn===1);$('#undoButton').disabled=!state.history.length||aiThinking||mode==='online';
+  [['#whiteCaptured',9-state.hand[1]-counts[1]],['#blackCaptured',9-state.hand[0]-counts[0]]].forEach(([selector,total])=>$(selector).innerHTML='<i></i>'.repeat(Math.max(0,total)));
+}
+
+function encodeOnlineBoard(){return state.board.map(value=>value===null?-1:value)}
+function decodeOnlineBoard(board){
+  return Array.from({length:24},(_,index)=>{
+    const value=board?.[index];
+    return value===0||value===1?value:null;
+  });
+}
+function onlineState(){
+  return{
+    schema:2,
+    board:encodeOnlineBoard(),
+    hand:[...state.hand],
+    turn:state.turn,
+    winner:state.winner===null?-1:state.winner,
+    winnerReason:state.winnerReason||'',
+    last:state.last===null?-1:state.last
+  };
+}
+function sendOnlineState(){onlineSession?.sendState(onlineState())}
+function receiveOnlineState(remote){
+  if(!remote)return;
+  state={
+    board:decodeOnlineBoard(remote.board),
+    hand:[Number(remote.hand?.[0]??9),Number(remote.hand?.[1]??9)],
+    turn:remote.turn===1?1:0,
+    selected:null,
+    removing:false,
+    winner:remote.winner===0||remote.winner===1?remote.winner:null,
+    winnerReason:remote.winnerReason||null,
+    last:Number.isInteger(remote.last)&&remote.last>=0?remote.last:null,
+    history:[]
+  };
+  render();
+  if(state.winner!==null)showWinner(state.winner,state.winnerReason||'在线对局已结束');
+}
+function leaveOnline(){
+  onlineSession?.close();onlineSession=null;onlinePlayer=null;onlineReady=false;onlineMessage='';
+}
+function onlineCallbacks(statusElement){
+  return{
+    onStatus:message=>{onlineMessage=message;statusElement.textContent=message;render()},
+    onReady:player=>{
+      onlinePlayer=player;onlineReady=true;mode='online';onlineMessage='';$('#modeName').textContent='远程联机';
+      if(player===0)startGame();else render();setTimeout(()=>modeDialog.close(),500);
+    },
+    onState:receiveOnlineState,
+    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';render()}
+  };
+}
+let onlineLoadPromise=null;
+async function onlineAPI(){
+  if(window.OnlineMorris)return window.OnlineMorris;
+  try{
+    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.0.0-alpha.1');
+    await onlineLoadPromise;
+    if(!window.OnlineMorris)throw new Error('在线模块未就绪');
+    return window.OnlineMorris;
+  }catch(error){onlineLoadPromise=null;throw new Error('在线模块加载失败，请检查网络后刷新页面')}
+}
+
+const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
+$('#modeButton').onclick=()=>modeDialog.showModal();$('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
+document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
+  document.querySelectorAll('.mode-option').forEach(option=>option.classList.toggle('selected',option===button));
+  const selected=button.dataset.mode;
+  $('#aiSettings').hidden=selected!=='ai';$('#onlineSettings').hidden=selected!=='online';
+  if(selected==='local'){leaveOnline();mode='local';$('#modeName').textContent='本地双人';modeDialog.close();startGame()}
+});
+$('#startAI').onclick=()=>{leaveOnline();mode='ai';humanPlayer=Number($('#humanColor').value);aiLevel=$('#aiLevel').value;$('#modeName').textContent='人机对战';modeDialog.close();startGame()};
+$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#roomInput').focus()};
+$('#roomInput').oninput=event=>event.target.value=event.target.value.replace(/\D/g,'').slice(0,6);
+$('#createRoom').onclick=async()=>{
+  leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';render();
+  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;
+  const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;
+  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')),{gameId:'morris',rulesVersion:1});$('#roomCode').textContent=code}
+  catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
+};
+$('#joinRoom').onclick=async()=>{
+  const code=$('#roomInput').value;if(code.length!==6){$('#joinStatus').textContent='请输入完整的 6 位房间码';return}
+  leaveOnline();mode='online';onlinePlayer=1;onlineMessage='正在连接在线服务器…';$('#joinStatus').textContent=onlineMessage;render();
+  try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')),{gameId:'morris',rulesVersion:1})}
+  catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
+};
+$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=()=>{$('#winDialog').close();startGame()};
+$('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
+startGame();

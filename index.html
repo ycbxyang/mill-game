@@ -1,142 +1,93 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#17231d" />
-<title>磨坊棋 v0.3.4 · Nine Men's Morris</title>
-<link rel="stylesheet" href="style.css?v=0.3.4" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101914">
+  <title>棋类合集 · v2.0.0-alpha.1</title>
+  <link rel="stylesheet" href="app.css?v=2.0.0-alpha.1">
 </head>
 <body>
-  <main class="game-shell">
-    <section class="hero">
+  <main class="hub-shell">
+    <header class="hub-hero">
       <div>
-        <p class="eyebrow">NINE MEN'S MORRIS</p>
-      <h1>磨坊棋 <small>v0.3.4</small></h1>
-        <p class="subtitle">落子成线，围猎对手。每一步，都在布一张更大的网。</p>
+        <p class="eyebrow">BOARD GAME COLLECTION</p>
+        <h1>棋类合集</h1>
+        <p class="lead">三种规则，三种思考方式。选择棋盘，开始下一局。</p>
       </div>
-      <button class="icon-button" id="rulesButton" aria-label="查看规则">规则 <span>?</span></button>
-    </section>
+      <span class="version-badge">v2.0.0 · ALPHA</span>
+    </header>
 
-    <section class="game-layout">
-      <aside class="player-card player-one active" id="playerCard0">
-        <div class="player-heading">
-          <span class="turn-dot"></span>
-          <div><small>玩家一</small><strong>象牙白</strong></div>
+    <section class="game-grid" aria-label="选择游戏">
+      <a class="game-card morris-card" href="games/morris/index.html">
+        <div class="card-preview morris-preview" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <g fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="10" y="10" width="100" height="100"/>
+              <rect x="28" y="28" width="64" height="64"/>
+              <rect x="44" y="44" width="32" height="32"/>
+              <path d="M60 10v34M60 76v34M10 60h34M76 60h34"/>
+            </g>
+            <g fill="currentColor">
+              <circle cx="10" cy="10" r="5"/><circle cx="60" cy="10" r="5"/>
+              <circle cx="92" cy="60" r="5"/><circle cx="44" cy="76" r="5"/>
+              <circle cx="28" cy="92" r="5"/>
+            </g>
+          </svg>
         </div>
-        <div class="stats">
-          <span><b id="whiteBoard">0</b> 棋盘</span>
-          <span><b id="whiteHand">9</b> 待下</span>
+        <div class="card-copy">
+          <p class="card-kicker">STRATEGY · 01</p>
+          <h2>磨坊棋</h2>
+          <p>落子成线，围猎对手。在布子、走子和飞行阶段之间转换。</p>
+          <div class="card-tags"><span>本地</span><span>人机</span><span>联机</span></div>
         </div>
-        <div class="captured" id="whiteCaptured" aria-label="白方吃掉的棋子"></div>
-      </aside>
+        <span class="card-arrow">进入棋盘 →</span>
+      </a>
 
-      <section class="board-panel">
-        <div class="status-wrap" aria-live="polite">
-          <span class="phase" id="phaseLabel">布子阶段</span>
-          <p id="statusText">象牙白先手，请选择一个交点落子</p>
-        </div>
-        <div class="board-frame">
-          <div class="board" id="board" role="grid" aria-label="磨坊棋棋盘">
-            <svg class="board-lines" viewBox="0 0 600 600" aria-hidden="true">
-              <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M55 55H545V545H55Z"/><path d="M140 140H460V460H140Z"/><path d="M225 225H375V375H225Z"/>
-                <path d="M300 55V225M545 300H375M300 545V375M55 300H225"/>
-              </g>
-            </svg>
+      <a class="game-card connect-card" href="games/connect-four/index.html">
+        <div class="card-preview connect-preview" aria-hidden="true">
+          <div class="connect-mini">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i class="red"></i><i></i><i></i><i></i><i></i><i></i>
+            <i class="gold"></i><i class="gold"></i><i class="red"></i><i></i><i></i><i></i><i></i>
+            <i class="red"></i><i class="gold"></i><i class="red"></i><i class="gold"></i><i></i><i></i><i></i>
           </div>
         </div>
-        <div class="controls">
-          <button id="modeButton"><span>♟</span> <b id="modeName">本地双人</b></button>
-          <button id="undoButton" disabled><span>↶</span> 撤销一步</button>
-          <button id="restartButton" class="primary"><span>↻</span> 重新开始</button>
+        <div class="card-copy">
+          <p class="card-kicker">TACTICS · 02</p>
+          <h2>四子棋</h2>
+          <p>选择一列投入棋子，率先横、竖或斜向连成四子。</p>
+          <div class="card-tags"><span>本地</span><span>人机</span><span>联机</span></div>
         </div>
-      </section>
+        <span class="card-arrow">进入棋盘 →</span>
+      </a>
 
-      <aside class="player-card player-two" id="playerCard1">
-        <div class="player-heading">
-          <span class="turn-dot"></span>
-          <div><small>玩家二</small><strong>曜石黑</strong></div>
+      <a class="game-card othello-card" href="games/othello/index.html">
+        <div class="card-preview othello-preview" aria-hidden="true">
+          <div class="othello-mini">
+            <i></i><i></i><i></i><i></i>
+            <i></i><i class="light"></i><i class="dark"></i><i></i>
+            <i></i><i class="dark"></i><i class="light"></i><i></i>
+            <i></i><i></i><i class="dark"></i><i></i>
+          </div>
         </div>
-        <div class="stats">
-          <span><b id="blackBoard">0</b> 棋盘</span>
-          <span><b id="blackHand">9</b> 待下</span>
+        <div class="card-copy">
+          <p class="card-kicker">CONTROL · 03</p>
+          <h2>黑白棋</h2>
+          <p>夹住并翻转对方棋子，让自己的颜色占领更多棋盘。</p>
+          <div class="card-tags"><span>本地</span><span>人机</span><span>联机</span></div>
         </div>
-        <div class="captured" id="blackCaptured" aria-label="黑方吃掉的棋子"></div>
-      </aside>
+        <span class="card-arrow">进入棋盘 →</span>
+      </a>
+    </section>
+
+    <section class="hub-notes" aria-label="合集特点">
+      <article><strong>三种对战方式</strong><span>同屏、人机、六位房间码</span></article>
+      <article><strong>为触控而设计</strong><span>兼容电脑、苹果与安卓平板</span></article>
+      <article><strong>独立规则引擎</strong><span>每款游戏单独测试，互不干扰</span></article>
     </section>
   </main>
-
-  <dialog id="modeDialog" class="mode-dialog">
-    <button class="dialog-close" data-close="modeDialog" aria-label="关闭">×</button>
-    <div class="mode-heading">
-      <p class="eyebrow">NEW MATCH</p>
-      <h2>开始新对局</h2>
-      <p>选择一种对战方式</p>
-    </div>
-    <div class="mode-list">
-      <button class="mode-option" data-mode="local">
-        <span class="mode-icon">◐</span>
-        <span class="mode-copy"><b>本地双人</b><small>两位玩家共用这台设备</small></span>
-        <span class="mode-arrow">›</span>
-      </button>
-      <button class="mode-option" data-mode="ai">
-        <span class="mode-icon">✦</span>
-        <span class="mode-copy"><b>人机对战</b><small>选择难度和先后手挑战电脑</small></span>
-        <span class="mode-arrow">›</span>
-      </button>
-      <button class="mode-option" data-mode="online">
-        <span class="mode-icon">⌁</span>
-        <span class="mode-copy"><b>远程联机</b><small>输入 6 位房间码与好友对战</small></span>
-        <span class="mode-arrow">›</span>
-      </button>
-    </div>
-    <div class="ai-settings" id="aiSettings" hidden>
-      <div class="settings-divider"><span>对局设置</span></div>
-      <label class="setting-row"><span><b>电脑难度</b><small>决定搜索深度与思考时间</small></span><select id="aiLevel"><option value="easy">轻松</option><option value="medium" selected>进阶</option><option value="hard">高手</option></select></label>
-      <label class="setting-row"><span><b>你的棋色</b><small>象牙白总是先手</small></span><select id="humanColor"><option value="0">象牙白 · 先手</option><option value="1">曜石黑 · 后手</option></select></label>
-      <button class="primary start-match" id="startAI">开始挑战 <span>→</span></button>
-    </div>
-    <div class="online-settings" id="onlineSettings" hidden>
-      <div class="settings-divider"><span>在线房间</span></div>
-      <p class="online-note">棋局通过 Firebase 云端实时同步，双方输入相同房间码即可开始。</p>
-      <div class="online-choice" id="onlineChoice">
-        <button class="primary" id="createRoom">创建房间</button>
-        <button id="showJoinRoom">加入房间</button>
-      </div>
-      <div class="room-card" id="roomCard" hidden>
-        <small>房间码</small><strong id="roomCode">------</strong>
-        <p id="onlineStatus">正在连接服务器…</p>
-      </div>
-      <div class="join-form" id="joinForm" hidden>
-        <label for="roomInput">输入好友的房间码</label>
-        <input id="roomInput" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code">
-        <button class="primary start-match" id="joinRoom">加入对局 <span>→</span></button>
-        <p id="joinStatus"></p>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="rulesDialog">
-    <button class="dialog-close" id="closeRules" aria-label="关闭">×</button>
-    <p class="eyebrow">HOW TO PLAY</p><h2>游戏规则</h2>
-    <ol>
-      <li><b>布子</b>：双方轮流把 9 枚棋子放到棋盘交点。</li>
-      <li><b>走子</b>：布子结束后，每回合沿棋盘连线移动一格。</li>
-      <li><b>成磨</b>：三枚己方棋子连成一线，可移除对方一枚棋子。若对方仍有不在“磨”中的棋子，不能移除磨内棋子。</li>
-      <li><b>飞行</b>：只剩 3 枚棋子时，可移动到任意空交点。</li>
-      <li><b>获胜</b>：令对方少于 3 枚棋子，或使其无合法走法。</li>
-    </ol>
-    <button class="primary wide" id="gotIt">明白了</button>
-  </dialog>
-
-  <dialog id="winDialog" class="win-dialog">
-    <div class="winner-piece" id="winnerPiece"></div>
-    <p class="eyebrow">GAME OVER</p><h2 id="winnerTitle">象牙白获胜</h2>
-    <p id="winnerReason"></p>
-    <button class="primary wide" id="playAgain">再来一局</button>
-  </dialog>
-<script type="module" src="online.js?v=0.3.4"></script>
-<script src="script.js?v=0.3.4"></script>
 </body>
 </html>

@@ -23,9 +23,15 @@ class Room{
   }
   close(){if(this.closed)return;this.closed=true;this.ready=false;this.unsubscribe?.();remove(this.roomRef).catch(()=>{})}
 }
-async function create(code,callbacks){
+async function create(code,callbacks,options={}){
   callbacks.onStatus?.('正在连接 Firebase…');const current=await user(),roomRef=ref(database,`rooms/${code}`);
-  const result=await runTransaction(roomRef,value=>value===null?{hostUid:current.uid,status:'waiting',createdAt:Date.now()}:undefined,{applyLocally:false});
+  const result=await runTransaction(roomRef,value=>value===null?{
+    hostUid:current.uid,
+    gameId:options.gameId||'morris',
+    rulesVersion:options.rulesVersion||1,
+    status:'waiting',
+    createdAt:Date.now()
+  }:undefined,{applyLocally:false});
   if(!result.committed)throw coded('ROOM_EXISTS','房间码冲突，请重新创建');
   let session,started=false;
   const unsubscribe=onValue(roomRef,snapshot=>{
@@ -36,7 +42,7 @@ async function create(code,callbacks){
   session=new Room(roomRef,current.uid,'host',callbacks,unsubscribe);
   callbacks.onStatus?.('房间已创建，等待好友加入…');return session;
 }
-async function join(code,callbacks){
+async function join(code,callbacks,options={}){
   callbacks.onStatus?.('正在查找房间…');const current=await user(),roomRef=ref(database,`rooms/${code}`);
   let roomSnapshot;
   for(let attempt=0;attempt<6;attempt++){
@@ -47,6 +53,8 @@ async function join(code,callbacks){
   }
   if(!roomSnapshot?.exists())throw coded('ROOM_NOT_FOUND','找不到该房间');
   const room=roomSnapshot.val();
+  if(options.gameId&&room.gameId&&room.gameId!==options.gameId)throw coded('GAME_MISMATCH','该房间属于另一款游戏');
+  if(options.rulesVersion&&room.rulesVersion&&room.rulesVersion!==options.rulesVersion)throw coded('VERSION_MISMATCH','双方游戏版本不一致，请刷新网页');
   if(room.guestUid)throw coded('ROOM_FULL','房间已有两位玩家');
   const guestRef=ref(database,`rooms/${code}/guestUid`);
   const result=await runTransaction(guestRef,value=>value===null?current.uid:undefined,{applyLocally:false});
