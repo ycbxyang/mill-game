@@ -43,32 +43,52 @@ function immediateWins(board,player,columns=validColumns(board)){
 }
 function positionKey(board,player){return board.map(value=>value+1).join('')+'|'+player}
 function evaluate(board,player){
-  const opponent=1-player,weights=[0,2,14,90,WIN],oppWeights=[0,2,16,105,WIN];
-  let score=0;
+  const opponent=1-player;
+  let score=0,ownPlayableThreats=0,oppPlayableThreats=0;
+  let ownCenter=0,oppCenter=0;
   for(let row=0;row<ROWS;row++){
     const value=board[row*COLS+3];
-    if(value===player)score+=8;else if(value===opponent)score-=8;
+    if(value===player)ownCenter++;else if(value===opponent)oppCenter++;
   }
+  const centerValue=count=>count?6+Math.min(count-1,1)*3+Math.max(count-2,0):0;
+  score+=centerValue(ownCenter)-centerValue(oppCenter);
   for(const line of WINDOWS){
-    let own=0,opp=0,empty=-1;
+    let own=0,opp=0;const empties=[];
     for(const index of line){
       if(board[index]===player)own++;
       else if(board[index]===opponent)opp++;
-      else empty=index;
+      else empties.push(index);
     }
     if(own&&opp)continue;
-    if(own){score+=weights[own];if(own===3&&rowFor(board,empty%COLS)===Math.floor(empty/COLS))score+=360}
-    else if(opp){score-=oppWeights[opp];if(opp===3&&rowFor(board,empty%COLS)===Math.floor(empty/COLS))score-=420}
+    let playable=0,near=0;
+    for(const index of empties){
+      const row=Math.floor(index/COLS),landing=rowFor(board,index%COLS),distance=landing-row;
+      if(distance===0)playable++;
+      else if(distance===1)near++;
+    }
+    if(own===3){
+      if(playable){score+=520;ownPlayableThreats++}
+      else score+=near?65:16;
+    }else if(opp===3){
+      if(playable){score-=590;oppPlayableThreats++}
+      else score-=near?78:20;
+    }else if(own===2)score+=10+playable*24+near*7;
+    else if(opp===2)score-=12+playable*28+near*8;
+    else if(own===1)score+=1+playable*2;
+    else if(opp===1)score-=1+playable*2;
   }
+  if(ownPlayableThreats>=2)score+=850;
+  if(oppPlayableThreats>=2)score-=980;
   return score;
 }
 function orderedMoves(board,player,columns,preferred){
   const opponent=1-player;
   return columns.map(col=>{
     const index=put(board,col,player);
-    let score=14-Math.abs(3-col)*3;
+    let score=6-Math.abs(3-col);
     if(col===preferred)score+=10000;
     const threats=immediateWins(board,player);
+    score+=threats.length*160;
     if(threats.length>=2)score+=1200;
     score-=immediateWins(board,opponent).length*900;
     board[index]=-1;

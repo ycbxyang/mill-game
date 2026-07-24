@@ -7,7 +7,7 @@ const POSITIONS=[
 const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
 const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
 const NAMES=['象牙白','曜石黑'];
-const AI_WORKER_VERSION='0.3.4';
+const AI_WORKER_VERSION='2.0.0-alpha.1';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
@@ -25,7 +25,7 @@ function canMove(player){return pieces(player).some(index=>legalTargets(index,pl
 function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPlayer||mode==='online'&&onlineReady&&state.turn===onlinePlayer}
 
 function startGame(){
-  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();hideWinner();render();
   if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
 }
 function saveTurn(){state.history.push(snapshot())}
@@ -41,7 +41,8 @@ function checkWinner(){
 function declareWinner(player,reason){
   state.winner=player;state.winnerReason=reason;render();showWinner(player,reason);
 }
-function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');if(!$('#winDialog').open)$('#winDialog').showModal()}
+function hideWinner(){$('#winDialog').hidden=true}
+function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');$('#winDialog').hidden=false}
 function handlePoint(index){
   if(state.winner!==null||aiThinking||!isHumanTurn())return;
   const player=state.turn;
@@ -180,12 +181,15 @@ function onlineCallbacks(statusElement){
     onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';render()}
   };
 }
-function onlineAPI(){
-  return new Promise((resolve,reject)=>{
-    if(window.OnlineMorris)return resolve(window.OnlineMorris);
-    const timer=setTimeout(()=>reject(new Error('在线模块加载失败，请检查网络后刷新页面')),10000);
-    window.addEventListener('online-morris-ready',()=>{clearTimeout(timer);resolve(window.OnlineMorris)},{once:true});
-  });
+let onlineLoadPromise=null;
+async function onlineAPI(){
+  if(window.OnlineMorris)return window.OnlineMorris;
+  try{
+    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.0.0-alpha.1');
+    await onlineLoadPromise;
+    if(!window.OnlineMorris)throw new Error('在线模块未就绪');
+    return window.OnlineMorris;
+  }catch(error){onlineLoadPromise=null;throw new Error('在线模块加载失败，请检查网络后刷新页面')}
 }
 
 const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
@@ -203,15 +207,15 @@ $('#createRoom').onclick=async()=>{
   leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';render();
   $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;
   const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;
-  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')));$('#roomCode').textContent=code}
+  try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')),{gameId:'morris',rulesVersion:1});$('#roomCode').textContent=code}
   catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
 };
 $('#joinRoom').onclick=async()=>{
   const code=$('#roomInput').value;if(code.length!==6){$('#joinStatus').textContent='请输入完整的 6 位房间码';return}
   leaveOnline();mode='online';onlinePlayer=1;onlineMessage='正在连接在线服务器…';$('#joinStatus').textContent=onlineMessage;render();
-  try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')))}
+  try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')),{gameId:'morris',rulesVersion:1})}
   catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
 };
-$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=()=>{$('#winDialog').close();startGame()};
+$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=startGame;
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
-startGame();
+$('.board-panel').appendChild($('#winDialog'));hideWinner();startGame();
