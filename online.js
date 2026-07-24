@@ -16,7 +16,11 @@ class Room{
   constructor(roomRef,uid,role,callbacks,unsubscribe){
     this.roomRef=roomRef;this.uid=uid;this.role=role;this.callbacks=callbacks;this.unsubscribe=unsubscribe;this.ready=true;this.closed=false;
   }
-  async sendState(state){if(this.ready)await update(this.roomRef,{state,lastWriter:this.uid,updatedAt:serverTimestamp()})}
+  async sendState(state){
+    if(!this.ready)return;
+    try{await update(this.roomRef,{state,lastWriter:this.uid,updatedAt:serverTimestamp()})}
+    catch(error){this.callbacks.onStatus?.('同步失败：'+error.message)}
+  }
   close(){if(this.closed)return;this.closed=true;this.ready=false;this.unsubscribe?.();remove(this.roomRef).catch(()=>{})}
 }
 async function create(code,callbacks){
@@ -27,7 +31,7 @@ async function create(code,callbacks){
   const unsubscribe=onValue(roomRef,snapshot=>{
     const room=snapshot.val();if(!room){if(started)callbacks.onClose?.();return}
     if(room.guestUid&&!started){started=true;callbacks.onStatus?.('好友已加入，对局开始');callbacks.onReady?.(0)}
-    if(room.state&&room.lastWriter!==current.uid)callbacks.onState?.(room.state);
+    if(room.state)callbacks.onState?.(room.state);
   },error=>callbacks.onStatus?.('同步失败：'+error.message));
   session=new Room(roomRef,current.uid,'host',callbacks,unsubscribe);
   callbacks.onStatus?.('房间已创建，等待好友加入…');return session;
@@ -51,7 +55,7 @@ async function join(code,callbacks){
   if(room.state)callbacks.onState?.(room.state);
   const unsubscribe=onValue(roomRef,snapshot=>{
     const value=snapshot.val();if(!value){callbacks.onClose?.();return}
-    if(value.state&&value.lastWriter!==current.uid)callbacks.onState?.(value.state);
+    if(value.state)callbacks.onState?.(value.state);
   },error=>callbacks.onStatus?.('同步失败：'+error.message));
   const session=new Room(roomRef,current.uid,'guest',callbacks,unsubscribe);
   callbacks.onStatus?.('连接成功，对局开始');callbacks.onReady?.(1);return session;
