@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": "auth != null && (!data.child('guestUid').exists() || data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid)",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid) || data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid || (!data.child('guestUid').exists() && newData.child('guestUid').val() === auth.uid))",
+        ".validate": "!newData.exists() || (newData.hasChild('hostUid') && newData.child('hostUid').isString())"
+      }
+    }
+  }
+}

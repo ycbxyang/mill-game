@@ -31,7 +31,7 @@ function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPla
 function startGame(){
   clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;
   if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}
-  aiThinking=false;state=newGame();$('#winDialog').close();render();
+  aiThinking=false;state=newGame();hideResult();render();
   if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
 }
 function finishAfterMove(player){
@@ -110,12 +110,13 @@ function render(){
   $('#phaseLabel').textContent=state.winner!==null||state.draw?'对局结束':'占领阶段';
   $('#statusText').textContent=statusMessage();$('#undoButton').disabled=!state.history.length||aiThinking||mode==='online';
 }
+function hideResult(){$('#winDialog').hidden=true}
 function showResult(){
   const total=counts(),dialog=$('#winDialog'),mark=$('#winnerMark');
   mark.className='winner-mark '+(state.draw?'draw':state.winner===1?'player-one':'');
   $('#winnerTitle').textContent=state.draw?'平局':`${NAMES[state.winner]}获胜`;
   $('#winnerReason').textContent=`终局比分 ${total[0]} : ${total[1]}`;
-  if(!dialog.open)dialog.showModal();
+  dialog.hidden=false;
 }
 
 function onlineState(){return{schema:1,board:[...state.board],turn:state.turn,winner:state.winner===null?-1:state.winner,draw:state.draw,last:state.last===null?-1:state.last,flipped:state.flipped.length?[...state.flipped]:[-1],passMessage:state.passMessage||''}}
@@ -172,5 +173,5 @@ $('#joinRoom').onclick=async()=>{
 };
 $('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
-$('#playAgain').onclick=()=>{$('#winDialog').close();startGame()};
-startGame();
+$('#playAgain').onclick=startGame;
+$('.board-panel').appendChild($('#winDialog'));hideResult();startGame();

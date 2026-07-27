@@ -25,7 +25,7 @@ function canMove(player){return pieces(player).some(index=>legalTargets(index,pl
 function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPlayer||mode==='online'&&onlineReady&&state.turn===onlinePlayer}
 
 function startGame(){
-  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();render();
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();hideWinner();render();
   if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
 }
 function saveTurn(){state.history.push(snapshot())}
@@ -41,7 +41,8 @@ function checkWinner(){
 function declareWinner(player,reason){
   state.winner=player;state.winnerReason=reason;render();showWinner(player,reason);
 }
-function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');if(!$('#winDialog').open)$('#winDialog').showModal()}
+function hideWinner(){$('#winDialog').hidden=true}
+function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');$('#winDialog').hidden=false}
 function handlePoint(index){
   if(state.winner!==null||aiThinking||!isHumanTurn())return;
   const player=state.turn;
@@ -215,6 +216,6 @@ $('#joinRoom').onclick=async()=>{
   try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')),{gameId:'morris',rulesVersion:1})}
   catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
 };
-$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=()=>{$('#winDialog').close();startGame()};
+$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=startGame;
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
-startGame();
+$('.board-panel').appendChild($('#winDialog'));hideWinner();startGame();
