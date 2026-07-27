@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Collection UI smoke test</title>
+<style>
+  body { font: 20px sans-serif; padding: 30px; }
+  iframe { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  [data-result="pass"] #result { color: #176b3a; }
+  [data-result="fail"] #result { color: #a52b26; }
+</style>
+<h1>Collection UI smoke test</h1>
+<pre id="result">RUNNING</pre>
+<iframe id="morris" src="../games/morris/index.html"></iframe>
+<iframe id="connect" src="../games/connect-four/index.html"></iframe>
+<iframe id="othello" src="../games/othello/index.html"></iframe>
+<script>
+const assert = (condition, message) => {
+  if (!condition) throw new Error(message);
+};
+const loaded = frame => new Promise(resolve => {
+  frame.addEventListener("load", resolve, { once: true });
+});
+
+(async () => {
+  const morris = document.querySelector("#morris");
+  const connect = document.querySelector("#connect");
+  const othello = document.querySelector("#othello");
+  await Promise.all([loaded(morris), loaded(connect), loaded(othello)]);
+
+  const m = morris.contentWindow;
+  const firstPoint = m.document.querySelector(".point.valid");
+  assert(firstPoint, "Morris did not expose an opening move");
+  firstPoint.click();
+  assert(m.document.querySelector("#whiteBoard").textContent === "1",
+    "Morris opening move did not render");
+
+  const c = connect.contentWindow;
+  [0, 1, 0, 1, 0, 1, 0].forEach(col => c.playColumn(col));
+  assert(c.document.querySelector("#score0").textContent === "4",
+    "Connect Four piece count is incorrect");
+  assert(c.document.querySelector("#winnerTitle").textContent.includes("琥珀黄"),
+    "Connect Four vertical win did not reach the UI");
+  const resultPanel = c.document.querySelector("#winDialog");
+  assert(!resultPanel.hidden, "Connect Four result panel stayed hidden");
+  assert(resultPanel.parentElement.classList.contains("board-panel"),
+    "Connect Four result panel is not placed below the board");
+  assert(!resultPanel.open, "Connect Four result still opened as a modal dialog");
+  assert(c.getComputedStyle(resultPanel).display !== "none",
+    "Connect Four result panel is not visible");
+  const boardBottom = c.document.querySelector(".board-card").getBoundingClientRect().bottom;
+  assert(resultPanel.getBoundingClientRect().top >= boardBottom,
+    "Connect Four result panel overlaps the final board");
+
+  const o = othello.contentWindow;
+  o.playCell(19);
+  assert(o.document.querySelector("#score0").textContent === "4",
+    "Othello flip did not update black score");
+  assert(o.document.querySelector("#score1").textContent === "1",
+    "Othello flip did not update white score");
+
+  document.body.dataset.result = "pass";
+  document.querySelector("#result").textContent =
+    "PASS: Morris opening, Connect Four win, and Othello flip rendered correctly.";
+})().catch(error => {
+  document.body.dataset.result = "fail";
+  document.querySelector("#result").textContent = `FAIL: ${error.message}`;
+});
+</script>

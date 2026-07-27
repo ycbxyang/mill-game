@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Online E2E</title>
+<style>
+  iframe { width: 48%; height: 700px; border: 1px solid #ccc; }
+</style>
+<iframe id="host" src="../games/morris/index.html"></iframe>
+<iframe id="guest" src="../games/morris/index.html"></iframe>
+<pre id="result">RUNNING</pre>
+<script>
+const wait = (test, timeout = 12000) => new Promise((resolve, reject) => {
+  const start = Date.now();
+  const tick = () => {
+    try {
+      const value = test();
+      if (value) return resolve(value);
+    } catch {}
+    if (Date.now() - start > timeout) return reject(new Error("timeout"));
+    setTimeout(tick, 100);
+  };
+  tick();
+});
+
+const loaded = frame => new Promise(resolve => {
+  frame.addEventListener("load", resolve, { once: true });
+});
+
+(async () => {
+  const host = document.querySelector("#host");
+  const guest = document.querySelector("#guest");
+  await Promise.all([loaded(host), loaded(guest)]);
+
+  const h = host.contentDocument;
+  const g = guest.contentDocument;
+
+  h.querySelector("#modeButton").click();
+  h.querySelector('[data-mode="online"]').click();
+  h.querySelector("#createRoom").click();
+
+  const code = await wait(() => {
+    const value = h.querySelector("#roomCode").textContent;
+    return /^\d{6}$/.test(value) && value;
+  });
+
+  g.querySelector("#modeButton").click();
+  g.querySelector('[data-mode="online"]').click();
+  g.querySelector("#showJoinRoom").click();
+  g.querySelector("#roomInput").value = code;
+  g.querySelector("#joinRoom").click();
+
+  await wait(() => !h.querySelector("#modeDialog").open, 20000);
+  await wait(() => !g.querySelector("#modeDialog").open, 20000);
+
+  const move = await wait(() => h.querySelector(".point.valid"), 5000);
+  move.click();
+  await wait(() => g.querySelector("#whiteBoard").textContent === "1", 8000);
+
+  document.querySelector("#result").textContent =
+    `PASS room=${code} synced=1`;
+  document.body.dataset.result = "pass";
+})().catch(error => {
+  document.querySelector("#result").textContent = `FAIL ${error.message}`;
+  document.body.dataset.result = "fail";
+});
+</script>

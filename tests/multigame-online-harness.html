@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Multi-game online UI test</title>
+<style>
+  body { font: 20px sans-serif; padding: 30px; }
+  iframe { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  [data-result="pass"] #result { color: #176b3a; }
+  [data-result="fail"] #result { color: #a52b26; }
+</style>
+<h1>Multi-game online UI test</h1>
+<pre id="result">RUNNING</pre>
+<iframe id="connectHost" src="../games/connect-four/index.html"></iframe>
+<iframe id="connectGuest" src="../games/connect-four/index.html"></iframe>
+<iframe id="othelloHost" src="../games/othello/index.html"></iframe>
+<iframe id="othelloGuest" src="../games/othello/index.html"></iframe>
+<script>
+const wait = (test, timeout = 5000) => new Promise((resolve, reject) => {
+  const start = Date.now();
+  const tick = () => {
+    try {
+      const value = test();
+      if (value) return resolve(value);
+    } catch {}
+    if (Date.now() - start > timeout) return reject(new Error("timeout"));
+    setTimeout(tick, 30);
+  };
+  tick();
+});
+const loaded = frame => new Promise(resolve => {
+  frame.addEventListener("load", resolve, { once: true });
+});
+const clone = value => JSON.parse(JSON.stringify(value));
+
+function installMock(frame, rooms) {
+  frame.contentWindow.OnlineMorris = {
+    async create(code, callbacks, options) {
+      const room = { callbacks, options, state: null, guest: null };
+      rooms.set(code, room);
+      callbacks.onStatus?.("房间已创建，等待好友加入…");
+      return {
+        async sendState(state) {
+          room.state = clone(state);
+          room.guest?.onState?.(clone(state));
+        },
+        close() { rooms.delete(code); }
+      };
+    },
+    async join(code, callbacks, options) {
+      const room = rooms.get(code);
+      if (!room) throw new Error("找不到该房间");
+      if (room.options.gameId !== options.gameId) throw new Error("游戏不匹配");
+      room.guest = callbacks;
+      callbacks.onStatus?.("连接成功，对局开始");
+      const session = {
+        async sendState(state) {
+          room.state = clone(state);
+          room.callbacks.onState?.(clone(state));
+        },
+        close() { rooms.delete(code); }
+      };
+      setTimeout(() => {
+        room.callbacks.onReady?.(0);
+        callbacks.onReady?.(1);
+        if (room.state) callbacks.onState?.(clone(room.state));
+      }, 0);
+      return session;
+    }
+  };
+}
+
+async function connectPair(hostFrame, guestFrame, rooms) {
+  installMock(hostFrame, rooms);
+  installMock(guestFrame, rooms);
+  const host = hostFrame.contentDocument;
+  const guest = guestFrame.contentDocument;
+
+  host.querySelector("#modeButton").click();
+  host.querySelector('[data-mode="online"]').click();
+  host.querySelector("#createRoom").click();
+  const code = await wait(() => {
+    const value = host.querySelector("#roomCode").textContent;
+    return /^\d{6}$/.test(value) && value;
+  });
+
+  guest.querySelector("#modeButton").click();
+  guest.querySelector('[data-mode="online"]').click();
+  guest.querySelector("#showJoinRoom").click();
+  guest.querySelector("#roomInput").value = code;
+  guest.querySelector("#joinRoom").click();
+  await wait(() => !host.querySelector("#modeDialog").open);
+  await wait(() => !guest.querySelector("#modeDialog").open);
+}
+
+(async () => {
+  const frames = [...document.querySelectorAll("iframe")];
+  await Promise.all(frames.map(loaded));
+
+  const connectHost = document.querySelector("#connectHost");
+  const connectGuest = document.querySelector("#connectGuest");
+  await connectPair(connectHost, connectGuest, new Map());
+  connectHost.contentWindow.playColumn(3);
+  await wait(() => connectGuest.contentDocument.querySelector("#score0").textContent === "1");
+
+  const othelloHost = document.querySelector("#othelloHost");
+  const othelloGuest = document.querySelector("#othelloGuest");
+  await connectPair(othelloHost, othelloGuest, new Map());
+  othelloHost.contentWindow.playCell(19);
+  await wait(() => othelloGuest.contentDocument.querySelector("#score0").textContent === "4");
+  await wait(() => othelloGuest.contentDocument.querySelector("#score1").textContent === "1");
+
+  document.body.dataset.result = "pass";
+  document.querySelector("#result").textContent =
+    "PASS: Connect Four and Othello create, join, and first-move sync succeeded.";
+})().catch(error => {
+  document.body.dataset.result = "fail";
+  document.querySelector("#result").textContent = `FAIL: ${error.message}`;
+});
+</script>
