@@ -20,14 +20,15 @@ Each game has three AI levels. Morris and Othello mainly use alpha-beta search. 
 
 ## Running Locally
 
-You can open `index.html` directly. If the browser blocks ES Modules loaded from local files, start a small local server from the project directory:
+You can open `index.html` directly. If the browser blocks ES Modules loaded from local files, clone the repository and start a small local server from the project directory:
 
 ```powershell
-cd D:\qiju
-D:\Python\python.exe -m http.server 8000
+git clone https://github.com/ycbxyang/qiju.git
+cd qiju
+python -m http.server 8000
 ```
 
-Then open:
+Use `python3` instead of `python` on systems where that is the Python 3 command. Once the server starts, open:
 
 ```text
 http://localhost:8000/

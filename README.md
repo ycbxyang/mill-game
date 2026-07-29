@@ -20,14 +20,15 @@
 
 ## 本地运行
 
-可以直接打开 `index.html`。如果浏览器限制本地加载 ES Module，建议在项目目录启动一个简单的本地服务器：
+可以直接打开 `index.html`。如果浏览器限制本地加载 ES Module，可以先克隆仓库，再从项目目录启动一个简单的本地服务器：
 
 ```powershell
-cd D:\qiju
-D:\Python\python.exe -m http.server 8000
+git clone https://github.com/ycbxyang/qiju.git
+cd qiju
+python -m http.server 8000
 ```
 
-然后访问：
+如果系统使用 `python3` 命令，把最后一行的 `python` 改为 `python3`。服务器启动后访问：
 
 ```text
 http://localhost:8000/
