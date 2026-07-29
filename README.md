@@ -1,10 +1,10 @@
-# 棋类合集
+# 棋聚
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
 这个项目最开始只有磨坊棋，后来又加入了四子棋和黑白棋。网页使用原生 HTML、CSS 和 JavaScript 编写，不需要安装，也没有构建步骤，在电脑、iPad 和安卓平板上都可以使用。
 
-在线试玩：[https://ycbxyang.github.io/mill-game/](https://ycbxyang.github.io/mill-game/)
+在线试玩：[https://ycbxyang.github.io/qiju/](https://ycbxyang.github.io/qiju/)
 
 目前项目仍在开发中，版本为 `v2.0.0-alpha.2`。
 
@@ -23,7 +23,7 @@
 可以直接打开 `index.html`。如果浏览器限制本地加载 ES Module，建议在项目目录启动一个简单的本地服务器：
 
 ```powershell
-cd D:\Codex_nine
+cd D:\qiju
 D:\Python\python.exe -m http.server 8000
 ```
 

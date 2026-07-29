@@ -19,7 +19,7 @@
 ## 1. 自检
 
 ```powershell
-cd D:\Codex_nine\training\morris
+cd D:\qiju\training\morris
 ..\..\.python312\python.exe -m unittest discover -s tests -v
 ```
 
@@ -28,7 +28,7 @@ cd D:\Codex_nine\training\morris
 先并行生成 500 盘老师棋谱，再用 GPU 训练 8 轮：
 
 ```powershell
-cd D:\Codex_nine\training\morris
+cd D:\qiju\training\morris
 ..\..\.python312\python.exe pretrain.py --games 500 --teacher-depth 3 --workers 8 --save-every 25 --epochs 8 --batch-size 1024 --device cuda
 ```
 

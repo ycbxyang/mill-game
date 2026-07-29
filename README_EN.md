@@ -1,10 +1,10 @@
-# Board Game Collection
+# Qiju · Board Game Collection
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
 This project started as a Nine Men's Morris page. Connect Four and Othello were added later. It is written in plain HTML, CSS, and JavaScript, with no installation or build step required. The layout is intended to work on desktop browsers, iPad, and Android tablets.
 
-Play online: [https://ycbxyang.github.io/mill-game/](https://ycbxyang.github.io/mill-game/)
+Play online: [https://ycbxyang.github.io/qiju/](https://ycbxyang.github.io/qiju/)
 
 The project is still in development. The current version is `v2.0.0-alpha.2`.
 
@@ -23,7 +23,7 @@ Each game has three AI levels. Morris and Othello mainly use alpha-beta search. 
 You can open `index.html` directly. If the browser blocks ES Modules loaded from local files, start a small local server from the project directory:
 
 ```powershell
-cd D:\Codex_nine
+cd D:\qiju
 D:\Python\python.exe -m http.server 8000
 ```
 
