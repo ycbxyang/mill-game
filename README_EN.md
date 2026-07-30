@@ -6,7 +6,7 @@ This project started as a Nine Men's Morris page. Connect Four and Othello were 
 
 Play online: [https://ycbxyang.github.io/qiju/](https://ycbxyang.github.io/qiju/)
 
-The project is still in development. The current version is `v2.0.0-alpha.2`.
+The current stable release is `v2.1.1`, and development is ongoing.
 
 ## Games
 
@@ -105,6 +105,6 @@ Python environments, checkpoints, replay data, and temporary exports are exclude
 - Use a fixed match evaluation process when comparing old and new AI versions.
 - Test on iPad, Android tablets, and desktop browsers.
 - Check reconnect behavior after weak connections, refreshes, and disconnects.
-- Publish `v2.0.0` after the main flows are stable.
+- Publish follow-up stable releases as the main flows evolve.
 
 Please open an Issue if you find a rules bug, online-play problem, or device compatibility issue.

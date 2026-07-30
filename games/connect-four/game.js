@@ -2,7 +2,7 @@
 
 const ROWS=6,COLS=7,SIZE=ROWS*COLS;
 const NAMES=['琥珀黄','珊瑚红'];
-const GAME_ID='connect-four',RULES_VERSION=1,AI_VERSION='2.0.0-alpha.3';
+const GAME_ID='connect-four',RULES_VERSION=1,AI_VERSION='2.1.1';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
@@ -49,7 +49,7 @@ function undo(){
   if(!state.history.length||aiThinking||mode==='online')return;
   aiRequest++;clearTimeout(aiTimer);restore(state.history.pop());
   if(mode==='ai')while(state.turn!==humanPlayer&&state.history.length)restore(state.history.pop());
-  aiThinking=false;render();queueAI();
+  aiThinking=false;hideResult();render();queueAI();
 }
 function queueAI(){
   clearTimeout(aiTimer);
@@ -121,22 +121,34 @@ function sendOnlineState(){onlineSession?.sendState(onlineState())}
 function receiveOnlineState(remote){
   if(!remote||!Array.isArray(remote.board)||remote.board.length!==SIZE)return;
   state={board:Array.from(remote.board,value=>value===0||value===1?value:-1),turn:remote.turn===1?1:0,winner:remote.winner===0||remote.winner===1?remote.winner:null,draw:Boolean(remote.draw),winning:Array.isArray(remote.winning)?remote.winning.filter(index=>index>=0):[],last:Number.isInteger(remote.last)&&remote.last>=0?remote.last:null,history:[]};
-  render();if(state.winner!==null||state.draw)showResult();
+  render();if(state.winner!==null||state.draw)showResult();else hideResult();
 }
 function leaveOnline(){onlineSession?.close();onlineSession=null;onlinePlayer=null;onlineReady=false;onlineMessage=''}
+function resetOnlinePanel(){
+  $('#onlineChoice').hidden=false;$('#roomCard').hidden=true;$('#joinForm').hidden=true;$('#onlineBack').hidden=true;
+}
+async function requestOnlineRestart(){
+  if(!onlineReady||!onlineSession){onlineMessage='在线房间尚未准备好';render();return}
+  onlineMessage='已发送重开请求，等待对方确认…';render();await onlineSession.requestRestart();
+}
+function restartGame(){if(mode==='online'){requestOnlineRestart();return}startGame()}
 function onlineCallbacks(statusElement){
   return{
     onStatus:message=>{onlineMessage=message;statusElement.textContent=message;if(message.startsWith('同步失败'))$('#syncWarning').textContent=message;render()},
     onReady:player=>{onlinePlayer=player;onlineReady=true;mode='online';onlineMessage='';$('#modeName').textContent='远程联机';if(player===0)startGame();else render();setTimeout(()=>$('#modeDialog').close(),450)},
     onState:receiveOnlineState,
-    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';$('#syncWarning').textContent=onlineMessage;render()}
-  };
+    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';$('#syncWarning').textContent=onlineMessage;render()},
+    onRestartRequest:({accept,reject})=>{
+      if(window.confirm('对手请求重新开始本局，是否同意？')){onlineMessage='已同意重开，等待新棋局…';render();accept()}else reject();
+    },
+    onRestartAccepted:()=>{onlineMessage='对手已同意重开';startGame()},
+    onRestartRejected:()=>{onlineMessage='对手拒绝了重开请求';render()}  };
 }
 let onlineLoadPromise=null;
 async function onlineAPI(){
   if(window.OnlineMorris)return window.OnlineMorris;
   try{
-    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.0.0-alpha.1');
+    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.1.1');
     await onlineLoadPromise;
     if(!window.OnlineMorris)throw new Error('在线模块未就绪');
     return window.OnlineMorris;
@@ -144,7 +156,7 @@ async function onlineAPI(){
 }
 
 const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
-$('#modeButton').onclick=()=>modeDialog.showModal();
+$('#modeButton').onclick=()=>{resetOnlinePanel();modeDialog.showModal()};
 $('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
 document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
   document.querySelectorAll('.mode-option').forEach(option=>option.classList.toggle('selected',option===button));
@@ -153,11 +165,11 @@ document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
   if(selected==='local'){leaveOnline();mode='local';$('#modeName').textContent='本地双人';modeDialog.close();startGame()}
 });
 $('#startAI').onclick=()=>{leaveOnline();mode='ai';humanPlayer=Number($('#humanColor').value);aiLevel=$('#aiLevel').value;$('#modeName').textContent='人机对战';modeDialog.close();startGame()};
-$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#roomInput').focus()};
+$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#onlineBack').hidden=false;$('#roomInput').focus()};
 $('#roomInput').oninput=event=>event.target.value=event.target.value.replace(/\D/g,'').slice(0,6);
 $('#createRoom').onclick=async()=>{
   leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';$('#syncWarning').textContent='';
-  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;render();
+  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;$('#onlineBack').hidden=false;$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;render();
   const code=String(Math.floor(100000+Math.random()*900000));
   try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')),{gameId:GAME_ID,rulesVersion:RULES_VERSION});$('#roomCode').textContent=code}
   catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
@@ -168,7 +180,8 @@ $('#joinRoom').onclick=async()=>{
   try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')),{gameId:GAME_ID,rulesVersion:RULES_VERSION})}
   catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
 };
-$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;
+$('#onlineBack').onclick=()=>{leaveOnline();resetOnlinePanel();mode='local';$('#modeName').textContent='本地双人';startGame()};
+$('#undoButton').onclick=undo;$('#restartButton').onclick=restartGame;
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
-$('#playAgain').onclick=startGame;
+$('#playAgain').onclick=restartGame;
 $('.board-panel').appendChild($('#winDialog'));hideResult();startGame();

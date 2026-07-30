@@ -229,7 +229,7 @@ async function ensureSession() {
     const root = new URL('.', self.location.href);
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.wasmPaths = new URL('vendor/ort/', root).href;
-    const model = new URL('models/morris-expert.onnx?v=iteration-15', root).href;
+    const model = new URL('models/morris-expert.onnx?v=2.1.1', root).href;
     sessionPromise = ort.InferenceSession.create(model, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all'
@@ -291,11 +291,13 @@ function terminalValue(state) {
   return result === state.player ? 1 : -1;
 }
 
-async function search(rootState, requestedSimulations) {
-  const root = createNode();
-  const rootEvaluation = await evaluate(rootState);
-  root.prior = rootEvaluation.prior;
-  root.expanded = true;
+async function search(rootState, requestedSimulations, existingRoot = null) {
+  const root = existingRoot || createNode();
+  if (!root.expanded) {
+    const rootEvaluation = await evaluate(rootState);
+    root.prior = rootEvaluation.prior;
+    root.expanded = true;
+  }
   let completed = 0;
 
   for (let simulation = 0; simulation < requestedSimulations; simulation++) {
@@ -359,22 +361,35 @@ async function search(rootState, requestedSimulations) {
       bestAction = action;
     }
   }
-  return {action: bestAction, simulations: completed};
+  return {action: bestAction, simulations: completed, root};
 }
 
 async function chooseMove(webState, timeLimit = 7000) {
   const started = performance.now();
-  deadline = started + timeLimit;
+  const safeLimit = Math.max(1000, Number(timeLimit) || 7000);
+  const finalDeadline = started + safeLimit;
+  deadline = started + safeLimit * 0.82;
   evaluatedNodes = 0;
   const state = toInternal(webState);
-  const base = await search(state, 32);
-  const afterBase = play(state, base.action);
+  let base = await search(state, Number.MAX_SAFE_INTEGER);
+  let afterBase = play(state, base.action);
   let capture = null;
   let captureSimulations = 0;
   if (afterBase.removing) {
-    const removal = await search(afterBase, 16);
+    deadline = finalDeadline;
+    const removal = await search(afterBase, Number.MAX_SAFE_INTEGER);
     capture = removal.action;
     captureSimulations = removal.simulations;
+  } else {
+    deadline = finalDeadline;
+    const continuation = await search(state, Number.MAX_SAFE_INTEGER, base.root);
+    base = {...continuation, simulations: base.simulations + continuation.simulations};
+    afterBase = play(state, base.action);
+    if (afterBase.removing) {
+      const removal = await search(afterBase, 4);
+      capture = removal.action;
+      captureSimulations = removal.simulations;
+    }
   }
   return {
     move: toWebMove(base.action, capture),

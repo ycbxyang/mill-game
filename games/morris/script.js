@@ -7,16 +7,17 @@ const POSITIONS=[
 const ADJ=[[1,9],[0,2,4],[1,14],[4,10],[1,3,5,7],[4,13],[7,11],[4,6,8],[7,12],[0,10,21],[3,9,11,18],[6,10,15],[8,13,17],[5,12,14,20],[2,13,23],[11,16],[15,17,19],[12,16],[10,19],[16,18,20,22],[13,19],[9,22],[19,21,23],[14,22]];
 const MILLS=[[0,1,2],[3,4,5],[6,7,8],[9,10,11],[12,13,14],[15,16,17],[18,19,20],[21,22,23],[0,9,21],[3,10,18],[6,11,15],[1,4,7],[16,19,22],[8,12,17],[5,13,20],[2,14,23]];
 const NAMES=['象牙白','曜石黑'];
-const AI_WORKER_VERSION='2.0.0-alpha.1';
+const AI_WORKER_VERSION='2.1.1';
+const EXPERT_WORKER_VERSION='2.1.1';
 const $=selector=>document.querySelector(selector);
 
 let state,mode='local',humanPlayer=0,aiLevel='medium';
-let aiWorker=null,aiRequest=0,aiThinking=false,aiTimer=null,aiWatchdog=null;
+let aiWorker=null,aiWorkerScript=null,aiRequest=0,aiThinking=false,aiTimer=null,aiWatchdog=null;
 let onlineSession=null,onlinePlayer=null,onlineReady=false,onlineMessage='';
 
-function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,winnerReason:null,last:null,history:[]}}
-function snapshot(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:null,last:state.last}}
-function restore(saved){const history=state.history;state={...saved,board:[...saved.board],hand:[...saved.hand],history}}
+function newGame(){return{board:Array(24).fill(null),hand:[9,9],turn:0,selected:null,removing:false,winner:null,draw:false,winnerReason:null,noCaptureTurns:0,positionCounts:{},last:null,history:[]}}
+function snapshot(){return{board:[...state.board],hand:[...state.hand],turn:state.turn,selected:null,removing:false,winner:null,draw:false,winnerReason:null,noCaptureTurns:state.noCaptureTurns,positionCounts:{...state.positionCounts},last:state.last}}
+function restore(saved){const history=state.history;state={...saved,board:[...saved.board],hand:[...saved.hand],positionCounts:{...saved.positionCounts},history}}
 function pieces(player,board=state.board){return board.reduce((list,value,index)=>(value===player&&list.push(index),list),[])}
 function inMill(index,player,board=state.board){return MILLS.some(mill=>mill.includes(index)&&mill.every(point=>board[point]===player))}
 function legalTargets(from,player){const empty=state.board.map((value,index)=>value===null?index:null).filter(index=>index!==null);return pieces(player).length===3?empty:ADJ[from].filter(index=>state.board[index]===null)}
@@ -25,28 +26,32 @@ function canMove(player){return pieces(player).some(index=>legalTargets(index,pl
 function isHumanTurn(){return mode==='local'||mode==='ai'&&state.turn===humanPlayer||mode==='online'&&onlineReady&&state.turn===onlinePlayer}
 
 function startGame(){
-  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null}aiThinking=false;state=newGame();hideWinner();render();
+  clearTimeout(aiTimer);clearTimeout(aiWatchdog);aiRequest++;if(aiWorker&&aiThinking){aiWorker.terminate();aiWorker=null;aiWorkerScript=null}aiThinking=false;state=newGame();hideWinner();render();
   if(mode==='online'&&onlineReady)sendOnlineState();else queueAI();
 }
 function saveTurn(){state.history.push(snapshot())}
+function positionKey(){return`${state.board.map(value=>value===null?'-':value).join('')}/${state.hand.join(',')}/${state.turn}`}
 function finishTurn(){
   state.selected=null;state.removing=false;state.turn=1-state.turn;checkWinner();render();
   if(mode==='online')sendOnlineState();else queueAI();
 }
 function checkWinner(){
-  if(state.hand[0]+state.hand[1]>0)return;const player=state.turn;
+  if(state.hand[0]+state.hand[1]>0||state.winner!==null||state.draw)return;const player=state.turn;
+  const key=positionKey();state.positionCounts[key]=(state.positionCounts[key]||0)+1;
+  if(state.positionCounts[key]>=3)return declareDraw('同一局面已经重复三次');
+  if(state.noCaptureTurns>=100)return declareDraw('连续 100 回合没有吃子');
   if(pieces(player).length<3)return declareWinner(1-player,'对手只剩下两枚棋子');
   if(!canMove(player))declareWinner(1-player,'对手已无路可走');
 }
-function declareWinner(player,reason){
-  state.winner=player;state.winnerReason=reason;render();showWinner(player,reason);
-}
+function declareWinner(player,reason){state.winner=player;state.winnerReason=reason;render();showWinner(player,reason)}
+function declareDraw(reason){state.draw=true;state.winnerReason=reason;render();showDraw(reason)}
 function hideWinner(){$('#winDialog').hidden=true}
 function showWinner(player,reason){$('#winnerTitle').textContent=`${NAMES[player]}获胜`;$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece '+(player?'black':'');$('#winDialog').hidden=false}
+function showDraw(reason){$('#winnerTitle').textContent='平局';$('#winnerReason').textContent=reason;$('#winnerPiece').className='winner-piece draw';$('#winDialog').hidden=false}
 function handlePoint(index){
-  if(state.winner!==null||aiThinking||!isHumanTurn())return;
+  if(state.winner!==null||state.draw||aiThinking||!isHumanTurn())return;
   const player=state.turn;
-  if(state.removing){if(removablePieces(1-player).includes(index)){state.board[index]=null;state.last=null;finishTurn()}return}
+  if(state.removing){if(removablePieces(1-player).includes(index)){state.board[index]=null;state.last=null;state.noCaptureTurns=0;finishTurn()}return}
   if(state.hand[player]>0){
     if(state.board[index]!==null)return;saveTurn();state.board[index]=player;state.hand[player]--;state.last=index;
     if(inMill(index,player)){state.removing=true;render()}else finishTurn();return;
@@ -54,40 +59,47 @@ function handlePoint(index){
   if(state.selected===null){if(state.board[index]===player){state.selected=index;render()}return}
   if(state.board[index]===player){state.selected=index;render();return}
   if(!legalTargets(state.selected,player).includes(index))return;
-  saveTurn();state.board[index]=player;state.board[state.selected]=null;state.selected=null;state.last=index;
+  saveTurn();state.board[index]=player;state.board[state.selected]=null;state.selected=null;state.last=index;state.noCaptureTurns++;
   if(inMill(index,player)){state.removing=true;render()}else finishTurn();
 }
 function undo(){
   if(!state.history.length||aiThinking||mode==='online')return;aiRequest++;clearTimeout(aiTimer);
   restore(state.history.pop());
   if(mode==='ai')while(state.turn!==humanPlayer&&state.history.length)restore(state.history.pop());
-  aiThinking=false;render();queueAI();
+  aiThinking=false;hideWinner();render();queueAI();
 }
 
 function queueAI(){
-  clearTimeout(aiTimer);if(mode!=='ai'||state.winner!==null||state.turn===humanPlayer)return;
+  clearTimeout(aiTimer);if(mode!=='ai'||state.winner!==null||state.draw||state.turn===humanPlayer)return;
   aiThinking=true;render();aiTimer=setTimeout(requestAIMove,80);
 }
 function requestAIMove(){
+  const workerScript=aiLevel==='hard'?'expert-worker.js':'ai-worker.js';
+  const workerVersion=aiLevel==='hard'?EXPERT_WORKER_VERSION:AI_WORKER_VERSION;
+  if(aiWorker&&aiWorkerScript!==workerScript){aiWorker.terminate();aiWorker=null;aiWorkerScript=null}
   if(!aiWorker){
-    aiWorker=new Worker(`ai-worker.js?v=${AI_WORKER_VERSION}`);
+    aiWorker=new Worker(`${workerScript}?v=${workerVersion}`);
+    aiWorkerScript=workerScript;
     aiWorker.onmessage=event=>applyAIMove(event.data);
-    aiWorker.onerror=()=>{aiThinking=false;$('#statusText').textContent='AI 引擎加载失败，请刷新页面重试'};
+    aiWorker.onerror=()=>forceAIMove(aiRequest);
   }
-  const id=++aiRequest;aiWorker.postMessage({id,state:{board:[...state.board],hand:[...state.hand],turn:state.turn},level:aiLevel});
-  const limit={easy:700,medium:1100,hard:1800}[aiLevel];clearTimeout(aiWatchdog);aiWatchdog=setTimeout(()=>forceAIMove(id),limit);
+  const id=++aiRequest;aiWorker.postMessage({id,state:{board:[...state.board],hand:[...state.hand],turn:state.turn,noCapture:state.noCaptureTurns},level:aiLevel,time:aiLevel==='hard'?7000:undefined});
+  const limit={easy:700,medium:1100,hard:25000}[aiLevel];clearTimeout(aiWatchdog);aiWatchdog=setTimeout(()=>forceAIMove(id),limit);
 }
-function applyAIMove({id,move}){
+function applyAIMove({id,move,error}){
   if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
   clearTimeout(aiWatchdog);
-  if(!move){aiThinking=false;render();return}
+  if(error||!move){forceAIMove(id);return}
   const player=state.turn;saveTurn();
-  if(move.from===null)state.hand[player]--;else state.board[move.from]=null;
-  state.board[move.to]=player;if(move.remove!==null)state.board[move.remove]=null;state.last=move.to;aiThinking=false;finishTurn();
+  if(move.from===null)state.hand[player]--;
+  else{state.board[move.from]=null;state.noCaptureTurns++}
+  state.board[move.to]=player;
+  if(move.remove!==null){state.board[move.remove]=null;state.noCaptureTurns=0}
+  state.last=move.to;aiThinking=false;finishTurn();
 }
 function forceAIMove(id){
   if(id!==aiRequest||mode!=='ai'||state.turn===humanPlayer)return;
-  if(aiWorker){aiWorker.terminate();aiWorker=null}
+  if(aiWorker){aiWorker.terminate();aiWorker=null;aiWorkerScript=null}
   applyAIMove({id,move:fallbackAIMove()});
 }
 function fallbackAIMove(){
@@ -107,9 +119,10 @@ function removablePiecesOn(board,player){
   const all=pieces(player,board),outside=all.filter(index=>!inMill(index,player,board));return outside.length?outside:all;
 }
 
-function phaseLabel(){if(state.hand[0]+state.hand[1]>0)return'布子阶段';return pieces(state.turn).length===3?'飞行阶段':'走子阶段'}
+function phaseLabel(){if(state.winner!==null||state.draw)return'对局结束';if(state.hand[0]+state.hand[1]>0)return'布子阶段';return pieces(state.turn).length===3?'飞行阶段':'走子阶段'}
 function statusMessage(counts){
   if(mode==='online'&&!onlineReady)return onlineMessage||'正在连接在线房间…';
+  if(state.draw)return state.winnerReason||'本局平局';if(state.winner!==null)return state.winnerReason||'对局结束';
   if(aiThinking)return'电脑正在思考…';if(!isHumanTurn())return mode==='online'?'等待对手行动…':'等待电脑行动…';
   if(state.removing)return`${NAMES[state.turn]}已连成磨坊，请移除一枚对方棋子`;
   if(state.hand[state.turn]>0)return`${NAMES[state.turn]}回合，请选择一个交点落子`;
@@ -128,7 +141,7 @@ function render(){
   });
   const counts=[pieces(0).length,pieces(1).length];
   $('#whiteBoard').textContent=counts[0];$('#blackBoard').textContent=counts[1];$('#whiteHand').textContent=state.hand[0];$('#blackHand').textContent=state.hand[1];$('#phaseLabel').textContent=phaseLabel();$('#statusText').textContent=statusMessage(counts);
-  $('#playerCard0').classList.toggle('active',state.turn===0);$('#playerCard1').classList.toggle('active',state.turn===1);$('#undoButton').disabled=!state.history.length||aiThinking||mode==='online';
+  $('#playerCard0').classList.toggle('active',state.turn===0&&state.winner===null&&!state.draw);$('#playerCard1').classList.toggle('active',state.turn===1&&state.winner===null&&!state.draw);$('#undoButton').disabled=!state.history.length||aiThinking||mode==='online';
   [['#whiteCaptured',9-state.hand[1]-counts[1]],['#blackCaptured',9-state.hand[0]-counts[0]]].forEach(([selector,total])=>$(selector).innerHTML='<i></i>'.repeat(Math.max(0,total)));
 }
 
@@ -141,12 +154,15 @@ function decodeOnlineBoard(board){
 }
 function onlineState(){
   return{
-    schema:2,
+    schema:3,
     board:encodeOnlineBoard(),
     hand:[...state.hand],
     turn:state.turn,
     winner:state.winner===null?-1:state.winner,
+    draw:state.draw,
     winnerReason:state.winnerReason||'',
+    noCaptureTurns:state.noCaptureTurns,
+    positionCounts:{...state.positionCounts},
     last:state.last===null?-1:state.last
   };
 }
@@ -160,16 +176,23 @@ function receiveOnlineState(remote){
     selected:null,
     removing:false,
     winner:remote.winner===0||remote.winner===1?remote.winner:null,
+    draw:Boolean(remote.draw),
     winnerReason:remote.winnerReason||null,
+    noCaptureTurns:Math.max(0,Number(remote.noCaptureTurns)||0),
+    positionCounts:remote.positionCounts&&typeof remote.positionCounts==='object'?{...remote.positionCounts}:{},
     last:Number.isInteger(remote.last)&&remote.last>=0?remote.last:null,
     history:[]
   };
   render();
-  if(state.winner!==null)showWinner(state.winner,state.winnerReason||'在线对局已结束');
+  if(state.winner!==null)showWinner(state.winner,state.winnerReason||'在线对局已结束');else if(state.draw)showDraw(state.winnerReason||'本局平局');else hideWinner();
 }
-function leaveOnline(){
-  onlineSession?.close();onlineSession=null;onlinePlayer=null;onlineReady=false;onlineMessage='';
+function leaveOnline(){onlineSession?.close();onlineSession=null;onlinePlayer=null;onlineReady=false;onlineMessage=''}
+function resetOnlinePanel(){$('#onlineChoice').hidden=false;$('#roomCard').hidden=true;$('#joinForm').hidden=true;$('#onlineBack').hidden=true}
+async function requestOnlineRestart(){
+  if(!onlineReady||!onlineSession){onlineMessage='在线房间尚未准备好';render();return}
+  onlineMessage='已发送重开请求，等待对方确认…';render();await onlineSession.requestRestart();
 }
+function restartGame(){if(mode==='online'){requestOnlineRestart();return}startGame()}
 function onlineCallbacks(statusElement){
   return{
     onStatus:message=>{onlineMessage=message;statusElement.textContent=message;render()},
@@ -178,14 +201,19 @@ function onlineCallbacks(statusElement){
       if(player===0)startGame();else render();setTimeout(()=>modeDialog.close(),500);
     },
     onState:receiveOnlineState,
-    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';render()}
+    onClose:()=>{onlineReady=false;onlineMessage='对手已离开房间';render()},
+    onRestartRequest:({accept,reject})=>{
+      if(window.confirm('对手请求重新开始本局，是否同意？')){onlineMessage='已同意重开，等待新棋局…';render();accept()}else reject();
+    },
+    onRestartAccepted:()=>{onlineMessage='对手已同意重开';startGame()},
+    onRestartRejected:()=>{onlineMessage='对手拒绝了重开请求';render()}
   };
 }
 let onlineLoadPromise=null;
 async function onlineAPI(){
   if(window.OnlineMorris)return window.OnlineMorris;
   try{
-    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.0.0-alpha.1');
+    if(!onlineLoadPromise)onlineLoadPromise=import('../../online.js?v=2.1.1');
     await onlineLoadPromise;
     if(!window.OnlineMorris)throw new Error('在线模块未就绪');
     return window.OnlineMorris;
@@ -193,7 +221,7 @@ async function onlineAPI(){
 }
 
 const modeDialog=$('#modeDialog'),rulesDialog=$('#rulesDialog');
-$('#modeButton').onclick=()=>modeDialog.showModal();$('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
+$('#modeButton').onclick=()=>{resetOnlinePanel();modeDialog.showModal()};$('[data-close="modeDialog"]').onclick=()=>modeDialog.close();
 document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
   document.querySelectorAll('.mode-option').forEach(option=>option.classList.toggle('selected',option===button));
   const selected=button.dataset.mode;
@@ -201,11 +229,11 @@ document.querySelectorAll('.mode-option').forEach(button=>button.onclick=()=>{
   if(selected==='local'){leaveOnline();mode='local';$('#modeName').textContent='本地双人';modeDialog.close();startGame()}
 });
 $('#startAI').onclick=()=>{leaveOnline();mode='ai';humanPlayer=Number($('#humanColor').value);aiLevel=$('#aiLevel').value;$('#modeName').textContent='人机对战';modeDialog.close();startGame()};
-$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#roomInput').focus()};
+$('#showJoinRoom').onclick=()=>{$('#onlineChoice').hidden=true;$('#roomCard').hidden=true;$('#joinForm').hidden=false;$('#onlineBack').hidden=false;$('#roomInput').focus()};
 $('#roomInput').oninput=event=>event.target.value=event.target.value.replace(/\D/g,'').slice(0,6);
 $('#createRoom').onclick=async()=>{
   leaveOnline();mode='online';onlinePlayer=0;onlineMessage='正在连接在线服务器…';render();
-  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;
+  $('#onlineChoice').hidden=true;$('#joinForm').hidden=true;$('#roomCard').hidden=false;$('#onlineBack').hidden=false;
   const code=String(Math.floor(100000+Math.random()*900000));$('#roomCode').textContent='------';$('#onlineStatus').textContent=onlineMessage;
   try{const api=await onlineAPI();onlineSession=await api.create(code,onlineCallbacks($('#onlineStatus')),{gameId:'morris',rulesVersion:1});$('#roomCode').textContent=code}
   catch(error){onlineMessage='创建失败：'+error.message;$('#onlineStatus').textContent=onlineMessage;render()}
@@ -216,6 +244,7 @@ $('#joinRoom').onclick=async()=>{
   try{const api=await onlineAPI();onlineSession=await api.join(code,onlineCallbacks($('#joinStatus')),{gameId:'morris',rulesVersion:1})}
   catch(error){onlineMessage='加入失败：'+error.message;$('#joinStatus').textContent=onlineMessage;render()}
 };
-$('#undoButton').onclick=undo;$('#restartButton').onclick=startGame;$('#playAgain').onclick=startGame;
+$('#onlineBack').onclick=()=>{leaveOnline();resetOnlinePanel();mode='local';$('#modeName').textContent='本地双人';startGame()};
+$('#undoButton').onclick=undo;$('#restartButton').onclick=restartGame;$('#playAgain').onclick=restartGame;
 $('#rulesButton').onclick=()=>rulesDialog.showModal();$('#closeRules').onclick=()=>rulesDialog.close();$('#gotIt').onclick=()=>rulesDialog.close();
 $('.board-panel').appendChild($('#winDialog'));hideWinner();startGame();
