@@ -1,0 +1,14 @@
+.python312/
+.venv/
+__pycache__/
+*.py[cod]
+
+training/connect_four/runs/
+training/connect_four/checkpoints/
+training/connect_four/exports/
+training/connect_four/data/
+
+training/morris/runs/
+training/morris/checkpoints/
+training/morris/exports/
+training/morris/data/

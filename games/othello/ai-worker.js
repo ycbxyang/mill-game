@@ -53,14 +53,21 @@ function search(board,depth,alpha,beta,turn,ai,passed=false){
     return search(board,depth,alpha,beta,1-turn,ai,true);
   }
   if(depth===0)return evaluate(board,ai);
-  const key=board.join(',')+'|'+turn+'|'+depth,hit=table.get(key);if(hit!==undefined)return hit;
+  const key=board.join(',')+'|'+turn+'|'+depth,hit=table.get(key);
+  if(hit){
+    if(hit.flag==='exact')return hit.value;
+    if(hit.flag==='lower')alpha=Math.max(alpha,hit.value);else beta=Math.min(beta,hit.value);
+    if(alpha>=beta)return hit.value;
+  }
+  const alphaStart=alpha,betaStart=beta;
   let best=turn===ai?-Infinity:Infinity;
   for(const move of moves){
     const value=search(applyMove(board,move,turn),depth-1,alpha,beta,1-turn,ai,false);
     if(turn===ai){best=Math.max(best,value);alpha=Math.max(alpha,best)}else{best=Math.min(best,value);beta=Math.min(beta,best)}
     if(alpha>=beta)break;
   }
-  table.set(key,best);return best;
+  const flag=best<=alphaStart?'upper':best>=betaStart?'lower':'exact';
+  table.set(key,{value:best,flag});return best;
 }
 function choose(board,ai,level){
   const moves=orderedMoves(board,ai);if(!moves.length)return null;

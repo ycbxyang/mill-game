@@ -10,10 +10,13 @@ assert(start >= 0 && end > start, "Online codec functions were not found");
 const context = {
   state: {
     board: Array(24).fill(null),
-    hand: [9, 9],
-    turn: 0,
+    hand: [0, 0],
+    turn: 1,
     winner: null,
-    winnerReason: null,
+    draw: true,
+    winnerReason: "同一局面已经重复三次",
+    noCaptureTurns: 73,
+    positionCounts: {"position-a": 3},
     last: null
   }
 };
@@ -25,14 +28,18 @@ const payload = context.onlineState();
 const databaseRoundTrip = JSON.parse(JSON.stringify(payload));
 const decoded = context.decodeOnlineBoard(databaseRoundTrip.board);
 
+assert.strictEqual(databaseRoundTrip.schema, 3);
 assert.strictEqual(databaseRoundTrip.board.length, 24);
 assert.strictEqual(decoded.length, 24);
 assert.strictEqual(decoded[5], 0);
 assert.strictEqual(decoded[4], null);
 assert.strictEqual(databaseRoundTrip.winner, -1);
+assert.strictEqual(databaseRoundTrip.draw, true);
+assert.strictEqual(databaseRoundTrip.noCaptureTurns, 73);
+assert.strictEqual(databaseRoundTrip.positionCounts["position-a"], 3);
 assert.strictEqual(databaseRoundTrip.last, -1);
 
-const legacySparse = context.decodeOnlineBoard({ 12: 1 });
+const legacySparse = context.decodeOnlineBoard({12: 1});
 assert.strictEqual(legacySparse[12], 1);
 assert.strictEqual(legacySparse[11], null);
 
