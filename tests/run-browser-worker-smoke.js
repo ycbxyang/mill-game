@@ -76,7 +76,11 @@ try {
 } finally {
   stop(browser);
   stop(server);
-  fs.rmSync(profile, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
+  try {
+    fs.rmSync(profile, {recursive: true, force: true, maxRetries: 5, retryDelay: 200});
+  } catch (error) {
+    if (!["ENOTEMPTY", "EBUSY", "EPERM"].includes(error.code)) throw error;
+  }
 }
 
 if (result.error) throw result.error;
