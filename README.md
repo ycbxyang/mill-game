@@ -2,6 +2,8 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
+[版本更新公告](./CHANGELOG.md)
+
 这个项目最开始只有磨坊棋，后来又加入了四子棋和黑白棋。网页使用原生 HTML、CSS 和 JavaScript 编写，不需要安装，也没有构建步骤，在电脑、iPad 和安卓平板上都可以使用。
 
 在线试玩：[https://ycbxyang.github.io/qiju/](https://ycbxyang.github.io/qiju/)

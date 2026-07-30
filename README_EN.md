@@ -2,6 +2,8 @@
 
 [简体中文](./README.md) | [English](./README_EN.md)
 
+[Release notes](./CHANGELOG.md#english)
+
 This project started as a Nine Men's Morris page. Connect Four and Othello were added later. It is written in plain HTML, CSS, and JavaScript, with no installation or build step required. The layout is intended to work on desktop browsers, iPad, and Android tablets.
 
 Play online: [https://ycbxyang.github.io/qiju/](https://ycbxyang.github.io/qiju/)
